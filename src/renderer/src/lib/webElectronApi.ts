@@ -317,7 +317,7 @@ const webElectronAPI: any = {
         method: 'POST',
         body: { credentials },
       }),
-    getCredits: async () => null,
+    getCredits: async (accountId: string) => request(`/v0/management/accounts/${accountId}/credits`),
     clearChats: async () => ({ success: false, error: 'clearChats is not supported in Web mode yet' }),
   },
 

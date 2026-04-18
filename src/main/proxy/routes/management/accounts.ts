@@ -17,6 +17,13 @@ import type {
   ValidationResult 
 } from '../../../../../shared/types'
 
+interface CreditInfo {
+  totalCredits: number
+  usedCredits: number
+  remainingCredits: number
+  expiresAt?: number
+}
+
 const router = new Router({ prefix: '/v0/management' })
 
 /**
@@ -303,6 +310,47 @@ router.post('/providers/:providerId/validate-token', managementAuthMiddleware, a
     ctx.body = createSuccessResponse(result)
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Failed to validate token'
+    ctx.status = 500
+    ctx.body = createErrorResponse('internal_error', errorMessage)
+  }
+})
+
+/**
+ * GET /v0/management/accounts/:id/credits
+ * Query account credits (MiniMax only for now)
+ */
+router.get('/accounts/:id/credits', managementAuthMiddleware, async (ctx: Context) => {
+  try {
+    const id = ctx.params.id
+    const account = AccountManager.getById(id, true)
+
+    if (!account) {
+      ctx.status = 404
+      ctx.body = createErrorResponse('account_not_found', `Account not found: ${id}`)
+      return
+    }
+
+    const provider = ProviderManager.getById(account.providerId)
+    if (!provider) {
+      ctx.status = 404
+      ctx.body = createErrorResponse('provider_not_found', `Provider not found: ${account.providerId}`)
+      return
+    }
+
+    if (provider.id !== 'minimax') {
+      ctx.set('Content-Type', 'application/json')
+      ctx.body = createSuccessResponse(null)
+      return
+    }
+
+    const { MiniMaxAdapter } = await import('../../../proxy/adapters/minimax')
+    const adapter = new MiniMaxAdapter(provider, account)
+    const credits = await adapter.getCredits()
+
+    ctx.set('Content-Type', 'application/json')
+    ctx.body = createSuccessResponse(credits as CreditInfo | null)
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to get account credits'
     ctx.status = 500
     ctx.body = createErrorResponse('internal_error', errorMessage)
   }
