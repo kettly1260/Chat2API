@@ -1,0 +1,6 @@
+# One pattern per line. Lines that contain these strings are skipped by scripts/privacy-check.js
+# Use this only for confirmed false positives.
+
+change_me_before_production
+YOUR_SECRET_KEY
+ci_secret

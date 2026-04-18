@@ -348,6 +348,28 @@ docker run -d --name chat2api-web -p 18181:18181 ghcr.io/<your-name>/chat2api-we
 
 这样上游更新会自动进入你的 Fork，并由 CI 自动验证 Web 与 Docker 可用性，避免“同步了新特性但 Web 端不可用”的回归问题。
 
+## Privacy 防护（提交前敏感信息检测）
+
+为避免将密钥、令牌、密码等敏感信息上传到 GitHub，仓库已内置双重检测：
+
+- 本地提交前检测：`.githooks/pre-commit` + `scripts/privacy-check.js`
+- 云端检测：`.github/workflows/secret-scan.yml`（Gitleaks）
+
+首次启用本地钩子：
+
+```bash
+npm run hooks:install
+```
+
+手动执行一次本地检测：
+
+```bash
+npm run privacy:check
+```
+
+如遇误报，可将安全的固定占位字符串加入 `.privacyignore`（一行一个）。
+不要把真实密钥加入忽略列表。
+
 ## 🤝 贡献
 
 1. Fork 本项目
