@@ -20,6 +20,33 @@ router.use(managementAuthMiddleware)
 const SENSITIVE_KEYS = ['managementApiSecret', 'apiKeys', 'credentials']
 const MASKED_SECRET = '***'
 
+function restoreMaskedApiKeys(incomingApiKeys: unknown, currentApiKeys: AppConfig['apiKeys']): AppConfig['apiKeys'] | null {
+  if (!Array.isArray(incomingApiKeys)) {
+    return null
+  }
+
+  const currentById = new Map(currentApiKeys.map((apiKey) => [apiKey.id, apiKey]))
+
+  return incomingApiKeys.map((rawApiKey) => {
+    if (!rawApiKey || typeof rawApiKey !== 'object') {
+      return rawApiKey as any
+    }
+
+    const apiKey = { ...(rawApiKey as Record<string, unknown>) }
+    if (apiKey.key !== MASKED_SECRET) {
+      return apiKey as any
+    }
+
+    const id = typeof apiKey.id === 'string' ? apiKey.id : ''
+    const current = id ? currentById.get(id) : undefined
+    if (current) {
+      apiKey.key = current.key
+    }
+
+    return apiKey as any
+  }) as AppConfig['apiKeys']
+}
+
 function maskSensitiveValue(value: unknown, key?: string): unknown {
   if (typeof value === 'string') {
     if (key && SENSITIVE_KEYS.some(k => key.toLowerCase().includes(k.toLowerCase()))) {
@@ -109,6 +136,7 @@ router.get('/', async (ctx: Context) => {
 router.put('/', async (ctx: Context) => {
   try {
     const updates = ctx.request.body as ConfigUpdateRequest
+    const currentConfig = ConfigManager.get()
 
     if (!updates || typeof updates !== 'object') {
       ctx.status = 400
@@ -130,10 +158,15 @@ router.put('/', async (ctx: Context) => {
       }
 
       if (managementApiUpdates.managementApiSecret === MASKED_SECRET) {
-        managementApiUpdates.managementApiSecret = ConfigManager.get().managementApi.managementApiSecret
+        managementApiUpdates.managementApiSecret = currentConfig.managementApi.managementApiSecret
       }
 
       normalizedUpdates.managementApi = managementApiUpdates as any
+    }
+
+    const restoredApiKeys = restoreMaskedApiKeys(normalizedUpdates.apiKeys, currentConfig.apiKeys)
+    if (restoredApiKeys) {
+      normalizedUpdates.apiKeys = restoredApiKeys
     }
 
     const validation = ConfigManager.validate(normalizedUpdates as Partial<AppConfig>)
