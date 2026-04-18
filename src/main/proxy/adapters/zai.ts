@@ -9,8 +9,8 @@ import { PassThrough } from 'stream'
 import { createParser } from 'eventsource-parser'
 import FormData from 'form-data'
 import { Account, Provider } from '../../store/types'
-import { hasToolUse, parseToolUse, ToolCall } from '../promptToolUse'
-import { parseToolCallsFromText } from '../utils/toolParser'
+import { hasToolUse, ToolCall } from '../promptToolUse'
+import { parseToolCalls } from '../utils/toolParser/index'
 import { 
   createToolCallState, 
   processStreamContent, 
@@ -601,9 +601,13 @@ export class ZaiStreamHandler {
   private sendToolCalls(transStream: PassThrough): void {
     if (this.toolCallsSent) return
     
-    const toolCalls = parseToolUse(this.content)
+    const { toolCalls, format } = parseToolCalls(this.content)
     if (toolCalls && toolCalls.length > 0) {
       this.toolCallsSent = true
+      console.log('[Z.ai] Parsed tool calls from final content:', {
+        format,
+        toolCount: toolCalls.length,
+      })
       
       // Send tool_calls delta
       for (let i = 0; i < toolCalls.length; i++) {
@@ -737,6 +741,13 @@ export class ZaiStreamHandler {
             if (outputChunks.length > 0) this.sentRole = true
           } else if (result.phase === 'done' && result.done) {
             console.log('[Z.ai] Stream finished, content length:', this.content.length)
+
+            // XML tool calls are parsed from the final accumulated content.
+            // If they exist, emit them immediately and stop normal completion handling.
+            this.sendToolCalls(transStream)
+            if (this.toolCallsSent) {
+              return
+            }
             
             // Flush any remaining tool calls
             const baseChunk = createBaseChunk(this.chatId, this.model, this.created)
@@ -880,6 +891,12 @@ export class ZaiStreamHandler {
                 console.log('[Z.ai] Non-stream finished, content length:', data.choices[0].message.content.length)
                 if (result.usage) {
                   data.usage = result.usage
+                }
+                const { toolCalls } = parseToolCalls(data.choices[0].message.content || '')
+                if (toolCalls.length > 0) {
+                  data.choices[0].message.tool_calls = toolCalls
+                  data.choices[0].message.content = null
+                  data.choices[0].finish_reason = 'tool_calls'
                 }
                 resolveOnce(data)
               } else if (result.error || eventData.error) {

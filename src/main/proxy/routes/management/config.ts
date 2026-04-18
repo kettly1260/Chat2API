@@ -18,6 +18,7 @@ const router = new Router({ prefix: '/v0/management/config' })
 router.use(managementAuthMiddleware)
 
 const SENSITIVE_KEYS = ['managementApiSecret', 'apiKeys', 'credentials']
+const MASKED_SECRET = '***'
 
 function maskSensitiveValue(value: unknown, key?: string): unknown {
   if (typeof value === 'string') {
@@ -121,7 +122,21 @@ router.put('/', async (ctx: Context) => {
       return
     }
 
-    const validation = ConfigManager.validate(updates as Partial<AppConfig>)
+    const normalizedUpdates = { ...(updates as Record<string, unknown>) } as Partial<AppConfig>
+
+    if (normalizedUpdates.managementApi && typeof normalizedUpdates.managementApi === 'object') {
+      const managementApiUpdates = {
+        ...(normalizedUpdates.managementApi as Record<string, unknown>),
+      }
+
+      if (managementApiUpdates.managementApiSecret === MASKED_SECRET) {
+        managementApiUpdates.managementApiSecret = ConfigManager.get().managementApi.managementApiSecret
+      }
+
+      normalizedUpdates.managementApi = managementApiUpdates as any
+    }
+
+    const validation = ConfigManager.validate(normalizedUpdates as Partial<AppConfig>)
 
     if (!validation.valid) {
       ctx.status = 400
@@ -136,7 +151,7 @@ router.put('/', async (ctx: Context) => {
       return
     }
 
-    const updatedConfig = ConfigManager.update(updates as Partial<AppConfig>)
+    const updatedConfig = ConfigManager.update(normalizedUpdates as Partial<AppConfig>)
     const maskedConfig = maskConfig(updatedConfig)
 
     ctx.body = {

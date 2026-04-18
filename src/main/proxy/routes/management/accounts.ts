@@ -7,6 +7,8 @@ import Router from '@koa/router'
 import type { Context } from 'koa'
 import { managementAuthMiddleware } from '../../middleware/managementAuth'
 import AccountManager from '../../../store/accounts'
+import ProviderManager from '../../../store/providers'
+import { validateCredentials } from '../../../store/validator'
 import type { 
   Account, 
   CreateAccountRequest, 
@@ -268,6 +270,39 @@ router.post('/accounts/:id/validate', managementAuthMiddleware, async (ctx: Cont
     ctx.body = createSuccessResponse(validationResult)
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Failed to validate account'
+    ctx.status = 500
+    ctx.body = createErrorResponse('internal_error', errorMessage)
+  }
+})
+
+/**
+ * POST /v0/management/providers/:providerId/validate-token
+ * Validate credentials payload without creating account
+ */
+router.post('/providers/:providerId/validate-token', managementAuthMiddleware, async (ctx: Context) => {
+  try {
+    const providerId = ctx.params.providerId
+    const provider = ProviderManager.getById(providerId)
+
+    if (!provider) {
+      ctx.status = 404
+      ctx.body = createErrorResponse('provider_not_found', `Provider not found: ${providerId}`)
+      return
+    }
+
+    const credentials = (ctx.request.body as { credentials?: Record<string, string> })?.credentials
+    if (!credentials || typeof credentials !== 'object') {
+      ctx.status = 400
+      ctx.body = createErrorResponse('invalid_request', 'Missing required field: credentials')
+      return
+    }
+
+    const result = await validateCredentials(provider, credentials)
+
+    ctx.set('Content-Type', 'application/json')
+    ctx.body = createSuccessResponse(result)
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to validate token'
     ctx.status = 500
     ctx.body = createErrorResponse('internal_error', errorMessage)
   }

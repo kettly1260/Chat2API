@@ -162,6 +162,7 @@ export function AddProviderDialog({
   const [expandedModels, setExpandedModels] = useState<Set<string>>(new Set())
   const [activeTab, setActiveTab] = useState<string>('manual')
   const [credentials, setCredentials] = useState<Record<string, string>>({})
+  const [showOptionalFields, setShowOptionalFields] = useState(false)
   const [isValidating, setIsValidating] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isOAuthLoading, setIsOAuthLoading] = useState(false)
@@ -420,7 +421,11 @@ export function AddProviderDialog({
     ? providers.find((p) => p.id === selectedProvider) 
     : null
 
-  const supportsOAuth = selectedProviderData && ['deepseek', 'glm', 'kimi', 'mimo', 'minimax', 'qwen', 'qwen-ai', 'zai', 'perplexity'].includes(selectedProviderData.id)
+  const isWebRuntime = typeof window !== 'undefined' && /^https?:$/.test(window.location.protocol)
+  const supportsOAuth =
+    !isWebRuntime &&
+    !!selectedProviderData &&
+    ['deepseek', 'glm', 'kimi', 'mimo', 'minimax', 'qwen', 'qwen-ai', 'zai', 'perplexity'].includes(selectedProviderData.id)
 
   const toggleModelExpansion = (providerId: string) => {
     setExpandedModels(prev => {
@@ -442,12 +447,19 @@ export function AddProviderDialog({
       setCredentials({})
       setValidationResult({})
       setActiveTab('manual')
+      setShowOptionalFields(false)
       setIsOAuthLoading(false)
       setOAuthStatus('')
       setVisibleFields({})
       setCopiedFields({})
     }
   }, [open])
+
+  useEffect(() => {
+    if (!supportsOAuth && activeTab === 'oauth') {
+      setActiveTab('manual')
+    }
+  }, [supportsOAuth, activeTab])
 
   const handleCredentialChange = (fieldName: string, value: string) => {
     setCredentials(prev => ({
@@ -463,6 +475,14 @@ export function AddProviderDialog({
     const credentialFields = selectedProviderData.credentialFields || []
     const requiredFields = credentialFields.filter(f => f.required)
     const missingFields = requiredFields.filter(f => !credentials[f.name])
+
+    if (Object.values(credentials).every(value => !value?.trim())) {
+      setValidationResult({
+        valid: false,
+        error: t('providers.validateFailed'),
+      })
+      return
+    }
     
     if (missingFields.length > 0) {
       setValidationResult({
@@ -606,6 +626,7 @@ export function AddProviderDialog({
     setCredentials({})
     setValidationResult({})
     setActiveTab('manual')
+    setShowOptionalFields(false)
     setOAuthStatus('')
   }
 
@@ -613,10 +634,22 @@ export function AddProviderDialog({
     if (!selectedProviderData) return null
 
     const credentialFields = selectedProviderData.credentialFields || []
+    const hiddenOptionalFields = credentialFields.some(field => !field.required && !credentials[field.name]?.trim())
+    const visibleCredentialFields = credentialFields.filter(field => field.required || showOptionalFields || !!credentials[field.name]?.trim())
 
     return (
       <div className="space-y-4">
-        {credentialFields.map((field) => {
+        {hiddenOptionalFields && (
+          <Button
+            type="button"
+            variant="ghost"
+            className="px-0 text-sm text-muted-foreground hover:text-foreground"
+            onClick={() => setShowOptionalFields(true)}
+          >
+            Show optional fields
+          </Button>
+        )}
+        {visibleCredentialFields.map((field) => {
           const getFieldTranslation = () => {
             const translations: Record<string, Record<string, { label: string; placeholder: string; helpText: string }>> = {
               deepseek: {
@@ -1025,14 +1058,14 @@ export function AddProviderDialog({
           </div>
         )}
 
-        {validationResult.valid && validationResult.userInfo && (
+        {validationResult.valid && (
           <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 p-3 rounded-lg mt-4">
             <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
             <div>
               <span className="font-medium">{t('providers.validationSuccess')}</span>
-              {validationResult.userInfo.quota !== undefined && (
+              {validationResult.userInfo?.quota !== undefined && (
                 <span className="ml-2">
-                  {t('providers.quota')}: {validationResult.userInfo.used || 0} / {validationResult.userInfo.quota}
+                  {t('providers.quota')}: {validationResult.userInfo?.used || 0} / {validationResult.userInfo?.quota}
                 </span>
               )}
             </div>

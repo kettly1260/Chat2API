@@ -73,26 +73,34 @@ export class DeepSeekHash {
 
     const prefix = `${salt}_${expireAt}_`
 
+    const wasm = this.wasmInstance as any
+    const stackPointerFn = wasm?.__wbindgen_add_to_stack_pointer
+    if (!wasm || typeof stackPointerFn !== 'function') {
+      throw new Error('DeepSeek WASM is not initialized correctly (__wbindgen_add_to_stack_pointer missing)')
+    }
+
+    let retptr = 0
+
     try {
-      const retptr = this.wasmInstance.__wbindgen_add_to_stack_pointer(-16)
+      retptr = stackPointerFn(-16)
 
       const ptr0 = this.encodeString(
         challenge,
-        this.wasmInstance.__wbindgen_export_0,
-        this.wasmInstance.__wbindgen_export_1
+        wasm.__wbindgen_export_0,
+        wasm.__wbindgen_export_1
       )
       const len0 = this.offset
 
       const ptr1 = this.encodeString(
         prefix,
-        this.wasmInstance.__wbindgen_export_0,
-        this.wasmInstance.__wbindgen_export_1
+        wasm.__wbindgen_export_0,
+        wasm.__wbindgen_export_1
       )
       const len1 = this.offset
 
-      this.wasmInstance.wasm_solve(retptr, ptr0, len0, ptr1, len1, difficulty)
+      wasm.wasm_solve(retptr, ptr0, len0, ptr1, len1, difficulty)
 
-      const dataView = new DataView(this.wasmInstance.memory.buffer)
+      const dataView = new DataView(wasm.memory.buffer)
       const status = dataView.getInt32(retptr + 0, true)
       const value = dataView.getFloat64(retptr + 8, true)
 
@@ -102,7 +110,9 @@ export class DeepSeekHash {
       return value
 
     } finally {
-      this.wasmInstance.__wbindgen_add_to_stack_pointer(16)
+      if (typeof stackPointerFn === 'function' && retptr !== 0) {
+        stackPointerFn(16)
+      }
     }
   }
 
@@ -117,19 +127,47 @@ export class DeepSeekHash {
 
 let deepSeekHashInstance: DeepSeekHash | null = null
 
+function resolveWasmPath(): string {
+  const candidates: string[] = []
+  const electronApp = app as any
+  const hasElectronApp = !!electronApp && typeof electronApp === 'object'
+  const appPath = hasElectronApp && typeof electronApp.getAppPath === 'function'
+    ? electronApp.getAppPath()
+    : undefined
+
+  if (hasElectronApp && electronApp.isPackaged && process.resourcesPath) {
+    candidates.push(path.join(process.resourcesPath, 'sha3_wasm_bg.7b9ca65ddd.wasm'))
+  }
+
+  if (appPath) {
+    candidates.push(path.join(appPath, 'sha3_wasm_bg.7b9ca65ddd.wasm'))
+    candidates.push(path.join(appPath, '..', 'sha3_wasm_bg.7b9ca65ddd.wasm'))
+  }
+
+  candidates.push(path.join(process.cwd(), 'sha3_wasm_bg.7b9ca65ddd.wasm'))
+  candidates.push(path.join(__dirname, '..', '..', '..', 'sha3_wasm_bg.7b9ca65ddd.wasm'))
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate
+    }
+  }
+
+  return candidates[candidates.length - 1]
+}
+
 export async function getDeepSeekHash(): Promise<DeepSeekHash> {
   if (!deepSeekHashInstance) {
-    deepSeekHashInstance = new DeepSeekHash()
-    // Use different paths for development and production environments
-    const wasmPath = app.isPackaged
-      ? path.join(process.resourcesPath, 'sha3_wasm_bg.7b9ca65ddd.wasm')
-      : path.join(app.getAppPath(), 'sha3_wasm_bg.7b9ca65ddd.wasm')
+    const instance = new DeepSeekHash()
+    const wasmPath = resolveWasmPath()
     console.log('[DeepSeekHash] WASM path:', wasmPath)
     console.log('[DeepSeekHash] File exists:', fs.existsSync(wasmPath))
     try {
-      await deepSeekHashInstance.init(wasmPath)
+      await instance.init(wasmPath)
+      deepSeekHashInstance = instance
       console.log('[DeepSeekHash] WASM initialized successfully')
     } catch (error) {
+      deepSeekHashInstance = null
       console.error('[DeepSeekHash] WASM initialization failed:', error)
       throw error
     }

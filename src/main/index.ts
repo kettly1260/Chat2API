@@ -5,6 +5,11 @@ import { createTrayManager, TrayManager } from './tray/TrayManager'
 import { registerIpcHandlers } from './ipc/handlers'
 import { UpdaterManager } from './updater'
 
+const isHeadlessService = process.argv.includes('--headless-service') || process.env.HEADLESS_SERVICE === '1'
+if (isHeadlessService) {
+  process.env.HEADLESS_SERVICE = '1'
+}
+
 // Prevent uncaught exceptions from crashing the app
 process.on('uncaughtException', (error) => {
   console.error('Uncaught Exception:', error)
@@ -39,6 +44,10 @@ if (!gotTheLock) {
   app.quit()
 } else {
   app.on('second-instance', () => {
+    if (isHeadlessService) {
+      return
+    }
+
     const mainWindow = getMainWindow()
     if (mainWindow) {
       if (mainWindow.isMinimized()) {
@@ -60,12 +69,20 @@ async function initializeApp(): Promise<void> {
   })
 
   app.on('window-all-closed', () => {
+    if (isHeadlessService) {
+      return
+    }
+
     if (process.platform !== 'darwin') {
       app.quit()
     }
   })
 
   app.on('activate', () => {
+    if (isHeadlessService) {
+      return
+    }
+
     const mainWindow = getMainWindow()
     if (!mainWindow) {
       createWindow()
@@ -85,6 +102,12 @@ async function initializeApp(): Promise<void> {
 }
 
 async function setupApp(): Promise<void> {
+  if (isHeadlessService) {
+    await registerIpcHandlers(null)
+    console.log('[Headless] Backend service initialized in headless mode')
+    return
+  }
+
   const mainWindow = createWindow({
     width: 1200,
     height: 800,

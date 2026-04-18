@@ -7,11 +7,18 @@ import Koa, { type Context, type Next } from 'koa'
 import Router from '@koa/router'
 import bodyParser from 'koa-bodyparser'
 import { Server as HttpServer } from 'http'
+import { createReadStream, existsSync, statSync } from 'fs'
+import { extname, join, resolve } from 'path'
 import routes from './routes'
 import managementRoutes from './routes/management'
 import { proxyStatusManager } from './status'
 import { storeManager } from '../store/store'
 import { sessionManager } from './sessionManager'
+
+interface ProxyServerOptions {
+  enableWebUI?: boolean
+  webUiDir?: string
+}
 
 /**
  * Proxy Server Class
@@ -22,10 +29,17 @@ export class ProxyServer {
   private server: HttpServer | null = null
   private port: number = 8080
   private host: string = '127.0.0.1'
+  private enableWebUI: boolean
+  private webUiDir: string | null
 
-  constructor() {
+  constructor(options: ProxyServerOptions = {}) {
     this.app = new Koa()
     this.router = new Router()
+    this.enableWebUI = options.enableWebUI ?? false
+    const fallbackWebUiDir = join(process.cwd(), 'out', 'renderer')
+    this.webUiDir = this.enableWebUI
+      ? resolve(options.webUiDir || fallbackWebUiDir)
+      : null
 
     this.setupMiddleware()
     this.setupRoutes()
@@ -49,6 +63,50 @@ export class ProxyServer {
 
       await next()
     })
+
+    if (this.enableWebUI && this.webUiDir) {
+      this.app.use(async (ctx, next) => {
+        if (ctx.method !== 'GET' && ctx.method !== 'HEAD') {
+          await next()
+          return
+        }
+
+        if (
+          ctx.path.startsWith('/v0/') ||
+          ctx.path.startsWith('/v1/') ||
+          ctx.path === '/health' ||
+          ctx.path === '/stats'
+        ) {
+          await next()
+          return
+        }
+
+        const baseDir = this.webUiDir!
+        const requestPath = decodeURIComponent(ctx.path)
+        const requestedFile = requestPath === '/' ? 'index.html' : requestPath.replace(/^\/+/, '')
+        const resolvedFile = resolve(baseDir, requestedFile)
+
+        if (!resolvedFile.startsWith(baseDir)) {
+          ctx.status = 403
+          return
+        }
+
+        if (existsSync(resolvedFile) && statSync(resolvedFile).isFile()) {
+          ctx.type = extname(resolvedFile) || 'application/octet-stream'
+          ctx.body = createReadStream(resolvedFile)
+          return
+        }
+
+        const indexFile = join(baseDir, 'index.html')
+        if (existsSync(indexFile)) {
+          ctx.type = 'text/html'
+          ctx.body = createReadStream(indexFile)
+          return
+        }
+
+        await next()
+      })
+    }
 
     this.app.use(bodyParser({
       jsonLimit: '50mb',
@@ -382,5 +440,23 @@ export class ProxyServer {
   }
 }
 
-export const proxyServer = new ProxyServer()
+function parseBooleanEnv(value: string | undefined): boolean | undefined {
+  if (value === undefined) return undefined
+  const normalized = value.trim().toLowerCase()
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false
+  return undefined
+}
+
+const shouldEnableWebUI =
+  parseBooleanEnv(process.env.WEB_UI_ENABLED) ??
+  parseBooleanEnv(process.env.CHAT2API_WEB_UI) ??
+  false
+
+const webUiDirFromEnv = process.env.WEB_UI_DIR
+
+export const proxyServer = new ProxyServer({
+  enableWebUI: shouldEnableWebUI,
+  webUiDir: webUiDirFromEnv,
+})
 export default proxyServer

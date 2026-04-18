@@ -6,34 +6,52 @@
 import Router from '@koa/router'
 import type { Context } from 'koa'
 import { ModelsResponse, ModelInfo } from '../types'
-import { loadBalancer } from '../loadbalancer'
 import { storeManager } from '../../store/store'
-import { modelMapper } from '../modelMapper'
+import { getBuiltinProvider } from '../../providers/builtin'
 
 const router = new Router({ prefix: '/v1' })
+
+function getProviderDisplayModels(providerId: string): string[] {
+  const effectiveModels = storeManager.getEffectiveModels(providerId)
+  if (effectiveModels.length > 0) {
+    return effectiveModels.map(model => model.displayName)
+  }
+
+  const provider = storeManager.getProviderById(providerId)
+  if (provider?.supportedModels && provider.supportedModels.length > 0) {
+    return provider.supportedModels
+  }
+
+  const builtin = getBuiltinProvider(providerId)
+  if (builtin?.supportedModels && builtin.supportedModels.length > 0) {
+    return builtin.supportedModels
+  }
+
+  return []
+}
+
+function hasActiveAccount(providerId: string): boolean {
+  const accounts = storeManager.getAccountsByProviderId(providerId)
+  return accounts.some(account => account.status === 'active')
+}
 
 /**
  * Get all available models
  */
 router.get('/models', async (ctx: Context) => {
-  const providers = storeManager.getProviders().filter(p => p.enabled)
+  const providers = storeManager
+    .getProviders()
+    .filter(provider => provider.enabled && hasActiveAccount(provider.id))
   const models: ModelInfo[] = []
   const addedModels = new Set<string>()
 
   for (const provider of providers) {
-    const accounts = storeManager.getAccountsByProviderId(provider.id)
-      .filter(account => account.status === 'active')
-
-    if (accounts.length === 0) {
-      continue
-    }
-
-    const effectiveModels = storeManager.getEffectiveModels(provider.id)
-    for (const model of effectiveModels) {
-      if (!addedModels.has(model.displayName)) {
-        addedModels.add(model.displayName)
+    const displayModels = getProviderDisplayModels(provider.id)
+    for (const modelName of displayModels) {
+      if (!addedModels.has(modelName)) {
+        addedModels.add(modelName)
         models.push({
-          id: model.displayName,
+          id: modelName,
           object: 'model',
           created: Math.floor(provider.createdAt / 1000),
           owned_by: provider.name,
@@ -84,20 +102,15 @@ router.get('/models/:model', async (ctx: Context) => {
     return
   }
 
-  const providers = storeManager.getProviders().filter(p => p.enabled)
+  const providers = storeManager
+    .getProviders()
+    .filter(provider => provider.enabled && hasActiveAccount(provider.id))
 
   for (const provider of providers) {
-    const accounts = storeManager.getAccountsByProviderId(provider.id)
-      .filter(account => account.status === 'active')
-
-    if (accounts.length === 0) {
-      continue
-    }
-
-    const effectiveModels = storeManager.getEffectiveModels(provider.id)
+    const displayModels = getProviderDisplayModels(provider.id)
     const normalizedModelId = modelId.toLowerCase()
-    const found = effectiveModels.some(m => {
-      const normalizedSupported = m.displayName.toLowerCase()
+    const found = displayModels.some(modelName => {
+      const normalizedSupported = modelName.toLowerCase()
       if (normalizedSupported.endsWith('*')) {
         return normalizedModelId.startsWith(normalizedSupported.slice(0, -1))
       }

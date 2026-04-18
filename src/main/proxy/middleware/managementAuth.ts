@@ -71,6 +71,13 @@ function extractAuthToken(ctx: Context): string | null {
   return null
 }
 
+function isWebMode(): boolean {
+  const value = process.env.CHAT2API_WEB_UI || process.env.WEB_UI_ENABLED
+  if (!value) return false
+
+  return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase())
+}
+
 /**
  * Management API Authentication Middleware
  * Validates Bearer token from Authorization header or X-Management-Secret header
@@ -80,6 +87,11 @@ function extractAuthToken(ctx: Context): string | null {
 export async function managementAuthMiddleware(ctx: Context, next: Next): Promise<void> {
   const config = storeManager.getConfig()
   const managementConfig = config.managementApi
+
+  if (isWebMode()) {
+    await next()
+    return
+  }
 
   if (!managementConfig.enableManagementApi) {
     ctx.status = 404

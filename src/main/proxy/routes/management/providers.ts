@@ -5,8 +5,14 @@
 
 import Router from '@koa/router'
 import type { Context } from 'koa'
+import axios from 'axios'
 import { managementAuthMiddleware } from '../../middleware/managementAuth'
 import ProviderManager from '../../../store/providers'
+import AccountManager from '../../../store/accounts'
+import { ProviderChecker } from '../../../providers/checker'
+import { getBuiltinProviders, getBuiltinProvider } from '../../../providers/builtin'
+import { CustomProviderManager } from '../../../providers/custom'
+import { storeManager } from '../../../store/store'
 import type {
   Provider,
   CreateProviderRequest,
@@ -36,6 +42,55 @@ function createSuccessResponse<T>(data: T): ManagementApiResponse<T> {
   }
 }
 
+function hasActiveAccount(providerId: string): boolean {
+  const accounts = AccountManager.getByProviderId(providerId, false)
+  return accounts.some(account => account.status === 'active')
+}
+
+router.get('/builtin', async (ctx: Context) => {
+  try {
+    const providers = getBuiltinProviders()
+    ctx.set('Content-Type', 'application/json')
+    ctx.body = createSuccessResponse(providers)
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to get builtin providers'
+    ctx.status = 500
+    ctx.body = createErrorResponse('internal_error', errorMessage)
+  }
+})
+
+router.post('/check-all-status', async (ctx: Context) => {
+  try {
+    const providers = ProviderManager.getAll()
+    const results = await Promise.all(
+      providers.map(async (provider) => {
+        if (!hasActiveAccount(provider.id)) {
+          return [
+            provider.id,
+            {
+              providerId: provider.id,
+              status: 'offline' as const,
+              latency: 0,
+              error: 'No active accounts',
+            },
+          ] as const
+        }
+
+        const result = await ProviderChecker.checkProviderStatus(provider)
+        return [provider.id, result] as const
+      })
+    )
+
+    const statusMap = Object.fromEntries(results)
+    ctx.set('Content-Type', 'application/json')
+    ctx.body = createSuccessResponse(statusMap)
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to check provider statuses'
+    ctx.status = 500
+    ctx.body = createErrorResponse('internal_error', errorMessage)
+  }
+})
+
 router.get('/', async (ctx: Context) => {
   try {
     const providers = ProviderManager.getAll()
@@ -64,6 +119,220 @@ router.get('/:id', async (ctx: Context) => {
     ctx.body = createSuccessResponse(provider)
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Failed to get provider'
+    ctx.status = 500
+    ctx.body = createErrorResponse('internal_error', errorMessage)
+  }
+})
+
+router.post('/:id/duplicate', async (ctx: Context) => {
+  try {
+    const id = ctx.params.id
+    const provider = CustomProviderManager.duplicate(id)
+
+    ctx.status = 201
+    ctx.set('Content-Type', 'application/json')
+    ctx.body = createSuccessResponse(provider)
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to duplicate provider'
+    ctx.status = 500
+    ctx.body = createErrorResponse('internal_error', errorMessage)
+  }
+})
+
+router.post('/:id/check-status', async (ctx: Context) => {
+  try {
+    const id = ctx.params.id
+    const provider = ProviderManager.getById(id)
+
+    if (!provider) {
+      ctx.status = 404
+      ctx.body = createErrorResponse('not_found', 'Provider not found')
+      return
+    }
+
+    if (!hasActiveAccount(provider.id)) {
+      ctx.set('Content-Type', 'application/json')
+      ctx.body = createSuccessResponse({
+        providerId: provider.id,
+        status: 'offline',
+        latency: 0,
+        error: 'No active accounts',
+      })
+      return
+    }
+
+    const result = await ProviderChecker.checkProviderStatus(provider)
+    ctx.set('Content-Type', 'application/json')
+    ctx.body = createSuccessResponse(result)
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to check provider status'
+    ctx.status = 500
+    ctx.body = createErrorResponse('internal_error', errorMessage)
+  }
+})
+
+router.post('/:id/update-models', async (ctx: Context) => {
+  try {
+    const providerId = ctx.params.id
+    const provider = ProviderManager.getById(providerId)
+
+    if (!provider) {
+      ctx.status = 404
+      ctx.body = createErrorResponse('not_found', 'Provider not found')
+      return
+    }
+
+    let modelsApiEndpoint: string | undefined
+    let modelsApiHeaders: Record<string, string> | undefined
+
+    if (provider.type === 'builtin') {
+      const builtinConfig = getBuiltinProvider(providerId)
+      if (builtinConfig) {
+        modelsApiEndpoint = builtinConfig.modelsApiEndpoint
+        modelsApiHeaders = builtinConfig.modelsApiHeaders
+      }
+    }
+
+    if (!modelsApiEndpoint) {
+      ctx.status = 400
+      ctx.body = createErrorResponse('unsupported', 'This provider does not support dynamic model updates')
+      return
+    }
+
+    const accounts = AccountManager.getByProviderId(providerId, true)
+    const activeAccount = accounts.find((a) => a.status === 'active')
+
+    const requestHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...modelsApiHeaders,
+    }
+
+    if (activeAccount?.credentials?.token) {
+      requestHeaders.Authorization = `Bearer ${activeAccount.credentials.token}`
+    }
+
+    if (activeAccount?.credentials?.cookies) {
+      requestHeaders.Cookie = activeAccount.credentials.cookies
+    }
+
+    const response = await axios.get(modelsApiEndpoint, {
+      headers: requestHeaders,
+      timeout: 15000,
+      validateStatus: () => true,
+    })
+
+    if (response.status !== 200) {
+      ctx.status = 502
+      ctx.body = createErrorResponse('upstream_error', `Failed to fetch models: HTTP ${response.status}`)
+      return
+    }
+
+    const models = response.data.data || response.data
+    if (!Array.isArray(models) || models.length === 0) {
+      ctx.status = 400
+      ctx.body = createErrorResponse('invalid_response', 'No models found in upstream response')
+      return
+    }
+
+    const supportedModels: string[] = []
+    const modelMappings: Record<string, string> = {}
+
+    models.forEach((model: any) => {
+      if (typeof model === 'string') {
+        supportedModels.push(model)
+        modelMappings[model] = model
+      } else if (model && typeof model === 'object') {
+        const modelId = model.id || model.model_id || model.name
+        const modelName = model.name || model.display_name || modelId
+        if (modelId) {
+          supportedModels.push(modelName || modelId)
+          modelMappings[modelName || modelId] = modelId
+        }
+      }
+    })
+
+    if (supportedModels.length === 0) {
+      ctx.status = 400
+      ctx.body = createErrorResponse('parse_error', 'Failed to parse models from upstream response')
+      return
+    }
+
+    ProviderManager.update(providerId, {
+      supportedModels,
+      modelMappings,
+    })
+
+    ctx.set('Content-Type', 'application/json')
+    ctx.body = createSuccessResponse({
+      success: true,
+      modelsCount: supportedModels.length,
+    })
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to update models'
+    ctx.status = 500
+    ctx.body = createErrorResponse('internal_error', errorMessage)
+  }
+})
+
+router.get('/:id/effective-models', async (ctx: Context) => {
+  try {
+    const providerId = ctx.params.id
+    const models = storeManager.getEffectiveModels(providerId)
+    ctx.set('Content-Type', 'application/json')
+    ctx.body = createSuccessResponse(models)
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to get effective models'
+    ctx.status = 500
+    ctx.body = createErrorResponse('internal_error', errorMessage)
+  }
+})
+
+router.post('/:id/custom-models', async (ctx: Context) => {
+  try {
+    const providerId = ctx.params.id
+    const model = ctx.request.body as { displayName: string; actualModelId: string }
+
+    if (!model?.displayName || !model?.actualModelId) {
+      ctx.status = 400
+      ctx.body = createErrorResponse('invalid_request', 'displayName and actualModelId are required')
+      return
+    }
+
+    const models = storeManager.addCustomModel(providerId, model)
+    ctx.set('Content-Type', 'application/json')
+    ctx.body = createSuccessResponse({ success: true, models })
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to add custom model'
+    ctx.status = 500
+    ctx.body = createErrorResponse('internal_error', errorMessage)
+  }
+})
+
+router.delete('/:id/models/:modelName', async (ctx: Context) => {
+  try {
+    const providerId = ctx.params.id
+    const modelName = decodeURIComponent(ctx.params.modelName)
+    const models = storeManager.removeModel(providerId, modelName)
+
+    ctx.set('Content-Type', 'application/json')
+    ctx.body = createSuccessResponse({ success: true, models })
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to remove model'
+    ctx.status = 500
+    ctx.body = createErrorResponse('internal_error', errorMessage)
+  }
+})
+
+router.post('/:id/reset-models', async (ctx: Context) => {
+  try {
+    const providerId = ctx.params.id
+    const models = storeManager.resetModels(providerId)
+
+    ctx.set('Content-Type', 'application/json')
+    ctx.body = createSuccessResponse({ success: true, models })
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to reset models'
     ctx.status = 500
     ctx.body = createErrorResponse('internal_error', errorMessage)
   }

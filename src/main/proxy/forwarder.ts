@@ -23,13 +23,12 @@ import { PerplexityAdapter } from './adapters/perplexity'
 import { PerplexityStreamHandler } from './adapters/perplexity-stream'
 import {
   isNativeFunctionCallingModel,
-  parseToolUse,
   formatToolResult,
   hasToolUse,
 } from './promptToolUse'
-import { parseToolCallsFromText } from './utils/toolParser'
 import { parseToolCalls } from './utils/toolParser/index'
 import { promptInjectionService } from './services/promptInjectionService'
+import { PromptGenerator } from './services/promptGenerator'
 import { sessionManager } from './sessionManager'
 import { cleanClientToolPrompts } from './utils/promptSignatures'
 import {
@@ -73,6 +72,102 @@ export class RequestForwarder {
 
     // 3. Return processed messages with tools undefined (Web API doesn't support tools parameter)
     return { messages: result.messages, tools: undefined }
+  }
+
+  /**
+   * Build a compact tool prompt for Z.ai.
+   * Z.ai uses prompt-based tool calling here, so we keep a compact tool list with short descriptions
+   * and required arguments, but avoid the full JSON schema that can make the request too large.
+   */
+  private buildCompactZaiToolPrompt(
+    tools: ChatCompletionTool[],
+    format: 'bracket' | 'xml'
+  ): string {
+    const compactToolDefinitions = tools.map((tool) => {
+      const description = tool.function.description?.trim() || 'No description'
+      const shortDescription = description.length > 140
+        ? `${description.slice(0, 137).trimEnd()}...`
+        : description
+
+      const requiredArgs = tool.function.parameters?.required || []
+      const requiredArgsText = requiredArgs.length > 0
+        ? `Required args: ${requiredArgs.join(', ')}`
+        : 'Required args: none'
+
+      return `Tool \`${tool.function.name}\`: ${shortDescription}. ${requiredArgsText}.`
+    }).join('\n')
+
+    const firstTool = tools[0]
+    const exampleArgs = firstTool
+      ? (firstTool.function.parameters?.required || []).reduce((acc, key) => {
+          acc[key] = 'value'
+          return acc
+        }, {} as Record<string, string>)
+      : {}
+
+    const formatExample = PromptGenerator.getFormatExample(format)
+    const realToolExample = firstTool
+      ? format === 'xml'
+        ? `<tool_use>\n<name>${firstTool.function.name}</name>\n<arguments>${JSON.stringify(exampleArgs)}</arguments>\n</tool_use>`
+        : `[function_calls]\n[call:${firstTool.function.name}]${JSON.stringify(exampleArgs)}[/call]\n[/function_calls]`
+      : ''
+
+    return `## Available Tools
+Use only the exact tool names below when needed. Call a tool whenever it helps answer the user's request.
+
+${compactToolDefinitions}
+
+${formatExample}
+
+EXAMPLE:
+${realToolExample}
+
+IMPORTANT:
+- Respond with ONLY the XML tool block when calling a tool
+- Use the exact tool name
+- Keep arguments as raw JSON inside <arguments>`
+  }
+
+  /**
+   * Prepare a compact Z.ai request without full schema injection.
+   */
+  private transformRequestForZai(
+    request: ChatCompletionRequest,
+    provider?: Provider
+  ): { messages: any[] } {
+    const { messages, tools } = request
+    const toolPromptFormat = storeManager.getConfig().toolPromptConfig?.defaultFormat || 'bracket'
+
+    if (!tools || tools.length === 0) {
+      return { messages }
+    }
+
+    const compactPrompt = this.buildCompactZaiToolPrompt(tools, toolPromptFormat)
+    const resultMessages: any[] = []
+    let injected = false
+
+    for (const message of messages) {
+      if (message.role === 'system' && !injected) {
+        const content = typeof message.content === 'string' ? `${message.content}\n\n${compactPrompt}` : message.content
+        resultMessages.push({ ...message, content })
+        injected = true
+      } else {
+        resultMessages.push(message)
+      }
+    }
+
+    if (!injected) {
+      resultMessages.unshift({ role: 'system', content: compactPrompt })
+    }
+
+    console.log('[forwardZai] Using compact tool prompt for Z.ai:', {
+      toolCount: tools.length,
+      providerId: provider?.id,
+      format: toolPromptFormat,
+      promptLength: compactPrompt.length,
+    })
+
+    return { messages: resultMessages }
   }
 
   /**
@@ -430,6 +525,18 @@ CRITICAL RULES:
         }
       } catch (error) {
         lastError = error instanceof Error ? error.message : 'Unknown error'
+        const errorStack = error instanceof Error ? error.stack : undefined
+        storeManager.addLog('error', '[Forwarder] doForward exception', {
+          requestId: context.requestId,
+          providerId: provider.id,
+          accountId: account.id,
+          model: request.model,
+          actualModel,
+          attempt,
+          retryLimit: maxRetries,
+          error: lastError,
+          errorStack,
+        })
       }
     }
 
@@ -1072,7 +1179,7 @@ CRITICAL RULES:
     console.log('[forwardZai] actualModel:', actualModel)
     console.log('[forwardZai] provider.modelMappings:', provider.modelMappings)
     try {
-      const transformed = this.transformRequestForPromptToolUse(request, provider)
+      const transformed = this.transformRequestForZai(request, provider)
       
       const adapter = new ZaiAdapter(provider, account)
       const { response, chatId, requestId } = await adapter.chatCompletion({

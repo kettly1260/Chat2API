@@ -23,6 +23,65 @@ let proxyServer: ProxyServer | null = null
 let proxyStartTime: number | null = null
 const updaterManager = UpdaterManager.getInstance()
 
+function parseBooleanEnv(value: string | undefined): boolean | undefined {
+  if (value === undefined) return undefined
+  const normalized = value.trim().toLowerCase()
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false
+  return undefined
+}
+
+function parseNumberEnv(value: string | undefined): number | undefined {
+  if (!value) return undefined
+  const parsed = Number.parseInt(value, 10)
+  if (Number.isNaN(parsed)) return undefined
+  return parsed
+}
+
+function isHeadlessMode(): boolean {
+  return process.env.HEADLESS_SERVICE === '1' || process.argv.includes('--headless-service')
+}
+
+function applyHeadlessEnvOverrides(): void {
+  if (!isHeadlessMode()) {
+    return
+  }
+
+  const currentConfig = storeManager.getConfig()
+  const updates: Record<string, unknown> = {}
+
+  const proxyPort = parseNumberEnv(process.env.HEADLESS_PROXY_PORT)
+  const proxyHost = process.env.HEADLESS_PROXY_HOST || process.env.PROXY_HOST
+  const forceAutoStartProxy = parseBooleanEnv(process.env.HEADLESS_AUTO_START_PROXY)
+  const managementEnabled = parseBooleanEnv(process.env.HEADLESS_MANAGEMENT_ENABLED)
+  const managementSecret = process.env.HEADLESS_MANAGEMENT_SECRET
+
+  if (proxyPort && proxyPort > 0 && proxyPort <= 65535) {
+    updates.proxyPort = proxyPort
+  }
+
+  if (proxyHost) {
+    updates.proxyHost = proxyHost
+  } else {
+    updates.proxyHost = '0.0.0.0'
+  }
+
+  updates.autoStartProxy = forceAutoStartProxy ?? true
+
+  if (managementEnabled !== undefined || managementSecret) {
+    updates.managementApi = {
+      ...currentConfig.managementApi,
+      enableManagementApi: managementEnabled ?? currentConfig.managementApi.enableManagementApi,
+      managementApiSecret: managementSecret || currentConfig.managementApi.managementApiSecret,
+    }
+  }
+
+  if (Object.keys(updates).length > 0) {
+    storeManager.updateConfig(updates as any)
+    console.log('[Headless] Applied environment config overrides')
+  }
+}
+
 export async function registerIpcHandlers(mainWindow: BrowserWindow | null): Promise<void> {
   try {
     await storeManager.initialize()
@@ -45,6 +104,8 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow | null): Pro
     registerErrorRecoveryHandlers(mainWindow)
     return
   }
+
+  applyHeadlessEnvOverrides()
   
   storeManager.setMainWindow(mainWindow)
   

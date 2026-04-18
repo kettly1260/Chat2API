@@ -1,10 +1,9 @@
 /**
  * Credential Storage Module - Core Storage Implementation
  * Uses electron-store for persistent storage
- * Uses Electron's safeStorage API for sensitive data encryption
+ * Uses Electron safeStorage when available and falls back to plain text in pure Node mode
  */
 
-import { app, safeStorage, BrowserWindow } from 'electron'
 import { homedir } from 'os'
 import { join } from 'path'
 import {
@@ -37,6 +36,46 @@ import { IpcChannels } from '../ipc/channels'
 // Dynamically import electron-store (ESM module)
 let Store: any = null
 
+type BrowserWindowLike = {
+  webContents?: {
+    send: (channel: string, ...args: unknown[]) => void
+  }
+}
+
+type SafeStorageLike = {
+  isEncryptionAvailable: () => boolean
+  encryptString: (value: string) => Buffer
+  decryptString: (value: Buffer) => string
+}
+
+const fallbackSafeStorage: SafeStorageLike = {
+  isEncryptionAvailable: () => false,
+  encryptString: (value: string) => Buffer.from(value, 'utf8'),
+  decryptString: (value: Buffer) => value.toString('utf8'),
+}
+
+let cachedSafeStorage: SafeStorageLike | null = null
+
+function getSafeStorage(): SafeStorageLike {
+  if (cachedSafeStorage) {
+    return cachedSafeStorage
+  }
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const electron = require('electron') as { safeStorage?: SafeStorageLike }
+    if (electron?.safeStorage) {
+      cachedSafeStorage = electron.safeStorage
+      return cachedSafeStorage
+    }
+  } catch {
+    // Running in pure Node mode (no Electron runtime)
+  }
+
+  cachedSafeStorage = fallbackSafeStorage
+  return cachedSafeStorage
+}
+
 /**
  * Storage Instance Type Definition
  */
@@ -49,10 +88,10 @@ type StoreType = any
 class StoreManager {
   private store: StoreType | null = null
   private isInitialized: boolean = false
-  private mainWindow: BrowserWindow | null = null
+  private mainWindow: BrowserWindowLike | null = null
   private initializationError: Error | null = null
 
-  setMainWindow(window: BrowserWindow | null): void {
+  setMainWindow(window: BrowserWindowLike | null): void {
     this.mainWindow = window
   }
 
@@ -93,6 +132,7 @@ class StoreManager {
         cwd: storagePath,
         defaults: this.getDefaultData(),
         encryptionKey: this.getEncryptionKey(),
+        clearInvalidConfig: true,
       })
 
       await this.initializeDefaultProviders()
@@ -110,6 +150,7 @@ class StoreManager {
           cwd: storagePath,
           defaults: this.getDefaultData(),
           encryptionKey: this.getEncryptionKey(),
+          clearInvalidConfig: true,
         })
         this.isInitialized = true
         this.initializationError = null
@@ -146,10 +187,36 @@ class StoreManager {
 
   /**
    * Get Storage Path
-   * Storage path: ~/.chat2api/
+   * Web mode default: ~/.chat2api-web/
+   * Electron mode default: ~/.chat2api/
+   *
+   * Override priority:
+   * 1) CHAT2API_STORAGE_DIR
+   * 2) CHAT2API_WEB_STORAGE_DIR / CHAT2API_ELECTRON_STORAGE_DIR
    */
   private getStoragePath(): string {
-    return join(homedir(), '.chat2api')
+    const globalOverride = process.env.CHAT2API_STORAGE_DIR?.trim()
+    if (globalOverride) {
+      return globalOverride
+    }
+
+    const isWebMode = this.isWebMode()
+    const modeOverride = isWebMode
+      ? process.env.CHAT2API_WEB_STORAGE_DIR?.trim()
+      : process.env.CHAT2API_ELECTRON_STORAGE_DIR?.trim()
+
+    if (modeOverride) {
+      return modeOverride
+    }
+
+    return join(homedir(), isWebMode ? '.chat2api-web' : '.chat2api')
+  }
+
+  private isWebMode(): boolean {
+    const value = process.env.CHAT2API_WEB_UI || process.env.WEB_UI_ENABLED
+    if (!value) return false
+
+    return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase())
   }
 
   /**
@@ -159,16 +226,9 @@ class StoreManager {
    * so it must be stable across app restarts
    */
   private getEncryptionKey(): string | undefined {
-    try {
-      if (safeStorage.isEncryptionAvailable()) {
-        // Use a fixed key - electron-store will use this to encrypt/decrypt data
-        // The key itself is not stored in the data file, only used for encryption
-        return 'chat2api-fixed-encryption-key-v1'
-      }
-    } catch (error) {
-      console.warn('Encryption unavailable, using unencrypted storage:', error)
-    }
-    return undefined
+    // Keep one stable key across Electron and pure Node runtimes.
+    // Otherwise, mixed runs may write different file formats and crash on read.
+    return 'chat2api-fixed-encryption-key-v1'
   }
 
   /**
@@ -193,7 +253,7 @@ class StoreManager {
    * Clear provider list, users create providers by adding accounts
    */
   private async initializeDefaultProviders(): Promise<void> {
-    const providers = this.store?.get('providers') || []
+    const providers = (this.store?.get('providers') as Provider[]) || []
     const builtinIds = BUILTIN_PROVIDERS.map(p => p.id)
     
     const validProviders = providers.filter((p: Provider) => {
@@ -202,6 +262,18 @@ class StoreManager {
       }
       return true
     })
+
+    const existingIds = new Set(validProviders.map((provider: Provider) => provider.id))
+    const missingBuiltinProviders = BUILTIN_PROVIDERS
+      .filter((builtinConfig) => !existingIds.has(builtinConfig.id))
+      .map((builtinConfig) => {
+        const now = Date.now()
+        return {
+          ...builtinConfig,
+          createdAt: now,
+          updatedAt: now,
+        }
+      })
     
     const userModelOverrides = this.store?.get('userModelOverrides') || {}
     
@@ -226,8 +298,15 @@ class StoreManager {
       }
       return p
     })
-    
-    this.store?.set('providers', updatedProviders)
+
+    this.store?.set('providers', [...updatedProviders, ...missingBuiltinProviders])
+
+    if (missingBuiltinProviders.length > 0) {
+      console.log(
+        '[Store] Restored missing builtin providers:',
+        missingBuiltinProviders.map(provider => provider.id).join(', '),
+      )
+    }
   }
 
   /**
@@ -283,15 +362,13 @@ class StoreManager {
    */
   encryptData(data: string): string {
     try {
-      console.log('[Store] encryptData input length:', data.length, 'content:', data.substring(0, 20) + '...')
+      console.log('[Store] encryptData input length:', data.length)
+      const safeStorage = getSafeStorage()
       if (safeStorage.isEncryptionAvailable()) {
         // Create new Buffer to store encryption result
         const encrypted = Buffer.from(safeStorage.encryptString(data))
         const result = encrypted.toString('base64')
-        console.log('[Store] encryptData output length:', result.length, 'content:', result.substring(0, 20) + '...')
-        // Verify encryption is correct
-        const decrypted = safeStorage.decryptString(encrypted)
-        console.log('[Store] encryptData verify decryption:', decrypted.substring(0, 20) + '...', 'match:', decrypted === data)
+        console.log('[Store] encryptData output length:', result.length)
         return result
       } else {
         console.log('[Store] Encryption unavailable, returning original data')
@@ -309,6 +386,7 @@ class StoreManager {
    */
   decryptData(encryptedData: string): string {
     try {
+      const safeStorage = getSafeStorage()
       if (safeStorage.isEncryptionAvailable()) {
         const buffer = Buffer.from(encryptedData, 'base64')
         return safeStorage.decryptString(buffer)
@@ -387,7 +465,24 @@ class StoreManager {
     const index = providers.findIndex((p: Provider) => p.id === id)
     
     if (index === -1) {
-      return null
+      const builtinConfig = BUILTIN_PROVIDERS.find((provider) => provider.id === id)
+      if (!builtinConfig) {
+        return null
+      }
+
+      const now = Date.now()
+      const createdProvider: Provider = {
+        ...builtinConfig,
+        createdAt: now,
+        updatedAt: now,
+      }
+
+      providers.push(createdProvider)
+      this.store!.set('providers', providers)
+
+      console.log('[Store] Auto-created missing builtin provider:', id)
+
+      return this.updateProvider(id, updates)
     }
     
     providers[index] = {

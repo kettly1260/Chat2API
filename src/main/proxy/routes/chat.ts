@@ -62,6 +62,101 @@ function extractUserInput(messages: Array<{ role: string; content?: string | any
   return undefined
 }
 
+function collectUndefinedStringPaths(
+  value: unknown,
+  path: string,
+  output: string[],
+  depth: number = 0
+): void {
+  if (depth > 6 || output.length >= 50) {
+    return
+  }
+
+  if (value === '[undefined]') {
+    output.push(path || '$')
+    return
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => {
+      collectUndefinedStringPaths(item, `${path}[${index}]`, output, depth + 1)
+    })
+    return
+  }
+
+  if (value && typeof value === 'object') {
+    for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+      const nextPath = path ? `${path}.${key}` : key
+      collectUndefinedStringPaths(nested, nextPath, output, depth + 1)
+      if (output.length >= 50) {
+        return
+      }
+    }
+  }
+}
+
+function sanitizeUndefinedSentinels(value: unknown): unknown {
+  if (value === '[undefined]' || value === undefined) {
+    return undefined
+  }
+
+  if (Array.isArray(value)) {
+    const sanitizedItems = value
+      .map((item) => sanitizeUndefinedSentinels(item))
+      .filter((item) => item !== undefined)
+
+    return sanitizedItems.length > 0 ? sanitizedItems : undefined
+  }
+
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+    const sanitizedObject: Record<string, unknown> = {}
+
+    for (const [key, nested] of entries) {
+      const sanitizedValue = sanitizeUndefinedSentinels(nested)
+      if (sanitizedValue !== undefined) {
+        sanitizedObject[key] = sanitizedValue
+      }
+    }
+
+    return Object.keys(sanitizedObject).length > 0 ? sanitizedObject : undefined
+  }
+
+  return value
+}
+
+function normalizeChatCompletionRequest(request: ChatCompletionRequest): ChatCompletionRequest | undefined {
+  const sanitized = sanitizeUndefinedSentinels(request)
+  if (!sanitized || typeof sanitized !== 'object' || Array.isArray(sanitized)) {
+    return undefined
+  }
+
+  return sanitized as ChatCompletionRequest
+}
+
+function buildRequestDebugSnapshot(request: ChatCompletionRequest): Record<string, unknown> {
+  const undefinedStringPaths: string[] = []
+  collectUndefinedStringPaths(request, '', undefinedStringPaths)
+
+  const messages = Array.isArray(request.messages) ? request.messages : []
+  const lastMessage = messages.length > 0 ? messages[messages.length - 1] : undefined
+  const tools = Array.isArray((request as any).tools) ? (request as any).tools : []
+
+  return {
+    model: request.model,
+    stream: request.stream === true,
+    messageCount: messages.length,
+    toolsCount: tools.length,
+    toolNames: tools.slice(0, 10).map((tool: any) => tool?.function?.name).filter(Boolean),
+    undefinedStringPaths,
+    hasAssistantMessageWithUndefinedToolCalls: messages.some(
+      (msg: any) => msg?.role === 'assistant' && msg?.tool_calls === '[undefined]'
+    ),
+    lastMessageRole: (lastMessage as any)?.role,
+    lastMessageHasContent: !!(lastMessage as any)?.content,
+  }
+}
+
 /**
  * Handle Chat Completions Request
  */
@@ -69,10 +164,12 @@ router.post('/completions', async (ctx: Context) => {
   const startTime = Date.now()
   const requestId = generateRequestId()
   const clientIP = getClientIP(ctx)
+  let rawRequestDebug: Record<string, unknown> = {}
 
   let request: ChatCompletionRequest
   try {
     request = ctx.request.body as ChatCompletionRequest
+    rawRequestDebug = buildRequestDebugSnapshot(request)
   } catch (error) {
     ctx.status = 400
     ctx.body = {
@@ -85,6 +182,22 @@ router.post('/completions', async (ctx: Context) => {
     }
     return
   }
+
+  const normalizedRequest = normalizeChatCompletionRequest(request)
+  if (!normalizedRequest) {
+    ctx.status = 400
+    ctx.body = {
+      error: {
+        message: 'Invalid request body',
+        type: 'invalid_request_error',
+        param: null,
+        code: null,
+      },
+    }
+    return
+  }
+
+  request = normalizedRequest
 
   if (!request.model) {
     ctx.status = 400
@@ -176,6 +289,16 @@ router.post('/completions', async (ctx: Context) => {
     clientIP,
   }
 
+  storeManager.addLog('debug', '[Chat] Incoming request snapshot', {
+    requestId,
+    providerId: provider.id,
+    accountId: account.id,
+    model: request.model,
+    actualModel,
+    clientIP,
+    debugRequest: rawRequestDebug,
+  })
+
   proxyStatusManager.recordRequestStart(request.model, provider.id, account.id)
 
   try {
@@ -212,6 +335,7 @@ router.post('/completions', async (ctx: Context) => {
         accountId: account.id,
         model: request.model,
         latency,
+        debugRequest: rawRequestDebug,
       })
 
       const userInput = extractUserInput(request.messages)
@@ -480,6 +604,8 @@ router.post('/completions', async (ctx: Context) => {
       model: request.model,
       latency,
       error: errorMessage,
+      errorStack,
+      debugRequest: rawRequestDebug,
     })
 
     const userInput = extractUserInput(request.messages)

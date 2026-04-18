@@ -169,7 +169,11 @@ export function AddAccountDialog({
   const isEditing = !!editingAccount
   const builtinProvider = provider as BuiltinProviderConfig | null
   const credentialFields: CredentialField[] = builtinProvider?.credentialFields || getDefaultCredentialFields(provider?.authType, t)
-  const supportsOAuth = provider && ['deepseek', 'glm', 'kimi', 'mimo', 'minimax', 'qwen', 'qwen-ai', 'zai', 'perplexity'].includes(provider.id)
+  const isWebRuntime = typeof window !== 'undefined' && /^https?:$/.test(window.location.protocol)
+  const supportsOAuth =
+    !isWebRuntime &&
+    !!provider &&
+    ['deepseek', 'glm', 'kimi', 'mimo', 'minimax', 'qwen', 'qwen-ai', 'zai', 'perplexity'].includes(provider.id)
 
   useEffect(() => {
     if (open) {
@@ -183,6 +187,12 @@ export function AddAccountDialog({
       }
     }
   }, [open, editingAccount])
+
+  useEffect(() => {
+    if (!supportsOAuth && activeTab === 'oauth') {
+      setActiveTab('manual')
+    }
+  }, [supportsOAuth, activeTab])
 
   const resetForm = () => {
     setName('')
@@ -207,6 +217,14 @@ export function AddAccountDialog({
 
     const requiredFields = credentialFields.filter(f => f.required)
     const missingFields = requiredFields.filter(f => !credentials[f.name])
+
+    if (Object.values(credentials).every(value => !value?.trim())) {
+      setValidationResult({
+        valid: false,
+        error: t('providers.validateFailed'),
+      })
+      return
+    }
     
     if (missingFields.length > 0) {
       setValidationResult({
@@ -445,14 +463,14 @@ export function AddAccountDialog({
               </div>
             )}
 
-            {validationResult.valid && validationResult.userInfo && (
+            {validationResult.valid && (
               <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 p-3 rounded-lg">
                 <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
                 <div>
                   <span className="font-medium">{t('providers.validationSuccess')}</span>
-                  {validationResult.userInfo.quota !== undefined && (
+                  {validationResult.userInfo?.quota !== undefined && (
                     <span className="ml-2">
-                      {t('providers.quota')}: {validationResult.userInfo.used || 0} / {validationResult.userInfo.quota}
+                      {t('providers.quota')}: {validationResult.userInfo?.used || 0} / {validationResult.userInfo?.quota}
                     </span>
                   )}
                 </div>
@@ -516,6 +534,7 @@ interface CredentialFieldsFormProps {
 function CredentialFieldsForm({ fields, credentials, onChange, t, providerId }: CredentialFieldsFormProps) {
   const [visibleFields, setVisibleFields] = useState<Record<string, boolean>>({})
   const [copiedFields, setCopiedFields] = useState<Record<string, boolean>>({})
+  const [showOptionalFields, setShowOptionalFields] = useState(false)
 
   const toggleFieldVisibility = (fieldName: string) => {
     setVisibleFields(prev => ({
@@ -636,7 +655,17 @@ function CredentialFieldsForm({ fields, credentials, onChange, t, providerId }: 
 
   return (
     <div className="space-y-4">
-      {fields.map((field) => {
+      {fields.some(field => !field.required && !credentials[field.name]?.trim()) && !showOptionalFields && (
+        <Button
+          type="button"
+          variant="ghost"
+          className="px-0 text-sm text-muted-foreground hover:text-foreground"
+          onClick={() => setShowOptionalFields(true)}
+        >
+          Show optional fields
+        </Button>
+      )}
+      {fields.filter(field => field.required || showOptionalFields || !!credentials[field.name]?.trim()).map((field) => {
         const translated = getFieldTranslation(field)
         const isPasswordField = field.type === 'password'
         const isVisible = visibleFields[field.name]
