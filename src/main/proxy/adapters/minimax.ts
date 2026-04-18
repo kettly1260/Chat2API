@@ -222,11 +222,11 @@ export class MiniMaxAdapter {
     console.log('[MiniMax] Token parsed - realUserID:', this.realUserID, 'jwtToken:', this.jwtToken.substring(0, 30) + '...')
   }
 
-  private async requestDeviceInfo(): Promise<DeviceInfo> {
+  private async requestDeviceInfo(forceRefresh: boolean = false): Promise<DeviceInfo> {
     const cacheKey = this.rawToken
     let result = deviceInfoMap.get(cacheKey)
     
-    if (result && result.refreshTime > unixTimestamp()) {
+    if (!forceRefresh && result && result.refreshTime > unixTimestamp()) {
       return result
     }
 
@@ -305,7 +305,7 @@ export class MiniMaxAdapter {
     
     const userData = { ...FAKE_USER_DATA }
     const realUserID = deviceInfo.realUserID || deviceInfo.userId
-    userData.uuid = realUserID
+    userData.uuid = deviceInfo.uuid || realUserID
     userData.device_id = deviceInfo.deviceId || undefined
     userData.user_id = realUserID
     userData.unix = unix
@@ -355,7 +355,7 @@ export class MiniMaxAdapter {
     const userData = { ...FAKE_USER_DATA }
     // Both uuid and user_id should use realUserID (matching reference implementation)
     const realUserID = deviceInfo.realUserID || deviceInfo.userId
-    userData.uuid = realUserID
+    userData.uuid = deviceInfo.uuid || realUserID
     userData.device_id = deviceInfo.deviceId || undefined
     userData.user_id = realUserID
     userData.unix = unix
@@ -579,10 +579,19 @@ export class MiniMaxAdapter {
     
     if (chatId) {
       console.log('[MiniMax] Using existing chat:', chatId)
-      const sendResponse = await this.request('POST', '/matrix/api/v1/chat/send_msg', {
+      let sendResponse = await this.request('POST', '/matrix/api/v1/chat/send_msg', {
         ...requestBody,
         chat_id: chatId,
       }, deviceInfo)
+
+      if (sendResponse.status === 401) {
+        console.warn('[MiniMax] send_msg 401, refreshing device info and retrying once...')
+        const refreshedDeviceInfo = await this.requestDeviceInfo(true)
+        sendResponse = await this.request('POST', '/matrix/api/v1/chat/send_msg', {
+          ...requestBody,
+          chat_id: chatId,
+        }, refreshedDeviceInfo)
+      }
       
       if (sendResponse.status !== 200) {
         throw new Error(`MiniMax API error: HTTP ${sendResponse.status}`)
@@ -594,7 +603,13 @@ export class MiniMaxAdapter {
       }
       msgId = msg_id
     } else {
-      const sendResponse = await this.request('POST', '/matrix/api/v1/chat/send_msg', requestBody, deviceInfo)
+      let sendResponse = await this.request('POST', '/matrix/api/v1/chat/send_msg', requestBody, deviceInfo)
+
+      if (sendResponse.status === 401) {
+        console.warn('[MiniMax] send_msg 401, refreshing device info and retrying once...')
+        const refreshedDeviceInfo = await this.requestDeviceInfo(true)
+        sendResponse = await this.request('POST', '/matrix/api/v1/chat/send_msg', requestBody, refreshedDeviceInfo)
+      }
       
       console.log('[MiniMax] Send response status:', sendResponse.status)
       
