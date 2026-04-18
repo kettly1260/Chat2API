@@ -89,6 +89,8 @@ interface DeviceInfo {
   uuid: string // Device registration uuid
 }
 
+type IdentityMode = 'device' | 'legacy' | 'anonymous'
+
 interface CreditInfo {
   totalCredits: number
   usedCredits: number
@@ -298,16 +300,25 @@ export class MiniMaxAdapter {
     method: string,
     uri: string,
     data: any,
-    deviceInfo: DeviceInfo
+    deviceInfo: DeviceInfo,
+    identityMode: IdentityMode = 'device'
   ): Promise<AxiosResponse> {
     const unix = `${Date.now()}`
     const timestamp = unixTimestamp()
     
     const userData = { ...FAKE_USER_DATA }
     const realUserID = deviceInfo.realUserID || deviceInfo.userId
-    userData.uuid = deviceInfo.uuid || realUserID
+    if (identityMode === 'legacy') {
+      userData.uuid = realUserID
+      userData.user_id = realUserID
+    } else if (identityMode === 'anonymous') {
+      userData.uuid = deviceInfo.uuid || realUserID
+      userData.user_id = ''
+    } else {
+      userData.uuid = deviceInfo.uuid || realUserID
+      userData.user_id = realUserID
+    }
     userData.device_id = deviceInfo.deviceId || undefined
-    userData.user_id = realUserID
     userData.unix = unix
     userData.token = this.jwtToken
     
@@ -323,7 +334,16 @@ export class MiniMaxAdapter {
     const yy = md5(`${encodeURIComponent(fullUri)}_${dataJson}${md5(unix)}ooui`)
     const signature = md5(`${timestamp}${this.jwtToken}${dataJson}`)
 
-    console.log('[MiniMax] Request - uuid:', realUserID, 'user_id:', realUserID, 'device_id:', deviceInfo.deviceId)
+    console.log(
+      '[MiniMax] Request - mode:',
+      identityMode,
+      'uuid:',
+      userData.uuid,
+      'user_id:',
+      userData.user_id,
+      'device_id:',
+      deviceInfo.deviceId,
+    )
 
     return await axios.request({
       method,
@@ -551,7 +571,7 @@ export class MiniMaxAdapter {
     this.model = request.model || 'MiniMax-M2.5'
     this.created = unixTimestamp()
     
-    const deviceInfo = await this.requestDeviceInfo()
+    let deviceInfo = await this.requestDeviceInfo()
     
     const messages = [...request.messages]
     
@@ -587,10 +607,27 @@ export class MiniMaxAdapter {
       if (sendResponse.status === 401) {
         console.warn('[MiniMax] send_msg 401, refreshing device info and retrying once...')
         const refreshedDeviceInfo = await this.requestDeviceInfo(true)
+        deviceInfo = refreshedDeviceInfo
         sendResponse = await this.request('POST', '/matrix/api/v1/chat/send_msg', {
           ...requestBody,
           chat_id: chatId,
         }, refreshedDeviceInfo)
+
+        if (sendResponse.status === 401) {
+          console.warn('[MiniMax] send_msg still 401, retrying with legacy identity mode...')
+          sendResponse = await this.request('POST', '/matrix/api/v1/chat/send_msg', {
+            ...requestBody,
+            chat_id: chatId,
+          }, refreshedDeviceInfo, 'legacy')
+        }
+
+        if (sendResponse.status === 401) {
+          console.warn('[MiniMax] send_msg still 401, retrying with anonymous identity mode...')
+          sendResponse = await this.request('POST', '/matrix/api/v1/chat/send_msg', {
+            ...requestBody,
+            chat_id: chatId,
+          }, refreshedDeviceInfo, 'anonymous')
+        }
       }
       
       if (sendResponse.status !== 200) {
@@ -608,7 +645,18 @@ export class MiniMaxAdapter {
       if (sendResponse.status === 401) {
         console.warn('[MiniMax] send_msg 401, refreshing device info and retrying once...')
         const refreshedDeviceInfo = await this.requestDeviceInfo(true)
+        deviceInfo = refreshedDeviceInfo
         sendResponse = await this.request('POST', '/matrix/api/v1/chat/send_msg', requestBody, refreshedDeviceInfo)
+
+        if (sendResponse.status === 401) {
+          console.warn('[MiniMax] send_msg still 401, retrying with legacy identity mode...')
+          sendResponse = await this.request('POST', '/matrix/api/v1/chat/send_msg', requestBody, refreshedDeviceInfo, 'legacy')
+        }
+
+        if (sendResponse.status === 401) {
+          console.warn('[MiniMax] send_msg still 401, retrying with anonymous identity mode...')
+          sendResponse = await this.request('POST', '/matrix/api/v1/chat/send_msg', requestBody, refreshedDeviceInfo, 'anonymous')
+        }
       }
       
       console.log('[MiniMax] Send response status:', sendResponse.status)
