@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  chat2api-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    image: chat2api-web:latest
+    container_name: chat2api-web
+    ports:
+      - "18181:18181"
+    environment:
+      CHAT2API_WEB_UI: "1"
+      WEB_UI_ENABLED: "1"
+      WEB_UI_DIR: "/app/out/renderer"
+      WEB_PROXY_HOST: "0.0.0.0"
+      WEB_PROXY_PORT: "18181"
+      WEB_MANAGEMENT_ENABLED: "1"
+      WEB_MANAGEMENT_SECRET: "change_me_before_production"
+    volumes:
+      - chat2api_data:/root/.chat2api
+    restart: unless-stopped
+
+volumes:
+  chat2api_data:
