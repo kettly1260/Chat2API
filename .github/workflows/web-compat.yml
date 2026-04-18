@@ -1,0 +1,127 @@
+name: Web Compatibility
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - web
+  pull_request:
+    branches:
+      - main
+      - master
+      - web
+  workflow_dispatch:
+
+jobs:
+  web-runtime-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund --ignore-scripts
+
+      - name: Build web bundle
+        run: npm run build:web
+
+      - name: Start web runtime
+        run: |
+          CHAT2API_WEB_UI=1 \
+          WEB_UI_ENABLED=1 \
+          WEB_UI_DIR=out/renderer \
+          WEB_PROXY_HOST=127.0.0.1 \
+          WEB_PROXY_PORT=18181 \
+          WEB_MANAGEMENT_ENABLED=1 \
+          node out/main/web.js > web-runtime.log 2>&1 &
+          echo $! > web-runtime.pid
+
+      - name: Wait for health endpoint
+        run: |
+          for i in {1..40}; do
+            if curl -sf http://127.0.0.1:18181/health > /dev/null; then
+              echo "Service is up"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Service did not become healthy in time"
+          cat web-runtime.log || true
+          exit 1
+
+      - name: Smoke check key endpoints
+        run: |
+          curl -sf http://127.0.0.1:18181/health
+          curl -sf http://127.0.0.1:18181/ | grep -q "Chat2API Proxy"
+          curl -s -o /tmp/models.out -w "%{http_code}" http://127.0.0.1:18181/v1/models > /tmp/models.code
+          code=$(cat /tmp/models.code)
+          if [ "$code" != "200" ] && [ "$code" != "401" ]; then
+            echo "Unexpected /v1/models status: $code"
+            cat /tmp/models.out
+            exit 1
+          fi
+
+      - name: Print runtime log on failure
+        if: failure()
+        run: cat web-runtime.log || true
+
+      - name: Stop web runtime
+        if: always()
+        run: |
+          if [ -f web-runtime.pid ]; then
+            kill "$(cat web-runtime.pid)" || true
+          fi
+
+  docker-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -f Dockerfile.web -t chat2api-web:ci .
+
+      - name: Run container
+        run: |
+          docker run -d --rm \
+            --name chat2api-web-ci \
+            -p 18181:18181 \
+            -e WEB_MANAGEMENT_SECRET=ci_secret \
+            chat2api-web:ci
+
+      - name: Wait for container health endpoint
+        run: |
+          for i in {1..50}; do
+            if curl -sf http://127.0.0.1:18181/health > /dev/null; then
+              echo "Container service is up"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Container failed to become healthy"
+          docker logs chat2api-web-ci || true
+          exit 1
+
+      - name: Smoke check container endpoints
+        run: |
+          curl -sf http://127.0.0.1:18181/health
+          curl -sf http://127.0.0.1:18181/ | grep -q "Chat2API Proxy"
+
+      - name: Print container logs on failure
+        if: failure()
+        run: docker logs chat2api-web-ci || true
+
+      - name: Stop container
+        if: always()
+        run: docker stop chat2api-web-ci || true

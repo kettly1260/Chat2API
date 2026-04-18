@@ -101,6 +101,55 @@ npm run build:linux        # 构建 Linux 版本 (AppImage, deb)
 npm run build:all          # 构建所有平台
 ```
 
+## 🌐 WebUI（无 Electron）模式
+
+适用于服务器和 Docker 场景：后端代理 + 管理 API + WebUI 在同一进程内运行，不依赖桌面窗口。
+
+### 本地运行
+
+```bash
+# 构建 main + renderer
+npm run build:web
+
+# 启动纯 Node Web 服务
+npm run start:web
+```
+
+默认访问地址：
+
+- WebUI：`http://127.0.0.1:18181/`
+- 管理 API：`http://127.0.0.1:18181/v0/management`
+- OpenAI 兼容 API：`http://127.0.0.1:18181/v1`
+
+常用环境变量：
+
+- `WEB_PROXY_HOST`（默认 `0.0.0.0`）
+- `WEB_PROXY_PORT`（默认 `18181`）
+- `WEB_MANAGEMENT_ENABLED`（默认启用）
+- `WEB_MANAGEMENT_SECRET`（建议在生产环境设置）
+- `WEB_UI_DIR`（默认 `out/renderer`）
+- `CHAT2API_STORAGE_DIR`（全局存储目录覆盖，优先级最高）
+- `CHAT2API_WEB_STORAGE_DIR`（仅 Web 模式存储目录覆盖）
+
+存储目录隔离说明：
+
+- Web 模式默认使用：`~/.chat2api-web`
+- Electron 桌面模式默认使用：`~/.chat2api`
+
+这样可以避免两种运行模式共享同一个 `data.json` 导致的配置/加密格式冲突。
+
+### Docker 运行
+
+```bash
+# 构建并启动
+docker compose -f docker-compose.web.yml up -d --build
+
+# 查看日志
+docker compose -f docker-compose.web.yml logs -f
+```
+
+首次使用前请修改 `docker-compose.web.yml` 中的 `WEB_MANAGEMENT_SECRET`。
+
 ## 📖 使用方法
 
 ### 步骤 1：启动应用
@@ -240,6 +289,64 @@ sudo xattr -rd com.apple.quarantine "/Applications/Chat2API.app"
 ### 如何更新？
 
 在 **关于** 页面检查更新，或从 [GitHub Releases](https://github.com/xiaoY233/Chat2API/releases) 下载最新版本。
+
+## 🔄 Fork 同步与 Web 持续可用（Docker）
+
+如果你希望在自己的 GitHub Fork 中持续跟进上游新特性，同时保持 Web 改动稳定可用，推荐使用以下流程。
+
+### 1. 首次配置远程仓库并推送到你的 GitHub
+
+```bash
+# 在本地仓库中执行
+git remote rename origin upstream
+git remote add origin https://github.com/<your-name>/Chat2API.git
+
+# 首次推送当前分支到你的 Fork
+git push -u origin main
+git push -u origin web
+```
+
+### 2. 启用自动上游同步
+
+仓库内置了 `.github/workflows/sync-upstream.yml`：
+
+- 每天自动触发一次（UTC 02:23）
+- 也支持手动触发（Actions 页面）
+- 自动从 `xiaoY233/Chat2API@main` 合并到你的 `web` 分支同步 PR
+
+建议：将 `web` 设为你的长期运行分支，在 PR 合并前要求 CI 通过。
+
+### 3. 自动 Web 兼容性回归
+
+`.github/workflows/web-compat.yml` 会在推送和 PR 时自动检查：
+
+- `build:web` 是否成功
+- `out/main/web.js` 是否可启动
+- `/health` 与 `/v1/models` 是否可访问
+- Docker 运行时是否正常
+
+### 4. 自动 Docker 构建并发布镜像
+
+`.github/workflows/docker-web.yml` 会自动构建 `Dockerfile.web`，并推送到 GHCR：
+
+- 镜像地址：`ghcr.io/<your-name>/chat2api-web`
+- 架构：`linux/amd64`、`linux/arm64`
+- 触发：push、PR、tag、手动触发
+
+拉取示例：
+
+```bash
+docker pull ghcr.io/<your-name>/chat2api-web:latest
+docker run -d --name chat2api-web -p 18181:18181 ghcr.io/<your-name>/chat2api-web:latest
+```
+
+### 5. 推荐保护策略
+
+- 为 `web` 分支开启 Branch Protection
+- 将 `Web Compatibility` 设为必需检查
+- 同步 PR 仅在检查通过后合并
+
+这样上游更新会自动进入你的 Fork，并由 CI 自动验证 Web 与 Docker 可用性，避免“同步了新特性但 Web 端不可用”的回归问题。
 
 ## 🤝 贡献
 
