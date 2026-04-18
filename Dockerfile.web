@@ -19,6 +19,7 @@ WORKDIR /app
 
 COPY package.json package-lock.json ./
 COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/node_modules/electron ./node_modules/electron
 COPY --from=build /app/out ./out
 
 ENV NODE_ENV=production
