@@ -7,6 +7,7 @@
 import { homedir } from 'os'
 import { join } from 'path'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'fs'
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto'
 import {
   StoreSchema,
   AppConfig,
@@ -59,6 +60,47 @@ const fallbackSafeStorage: SafeStorageLike = {
   isEncryptionAvailable: () => false,
   encryptString: (value: string) => Buffer.from(value, 'utf8'),
   decryptString: (value: Buffer) => value.toString('utf8'),
+}
+
+const FALLBACK_ENCRYPTION_PREFIX = 'enc:v1:'
+
+function getFallbackEncryptionKey(): Buffer {
+  const secret =
+    process.env.CHAT2API_STORAGE_SECRET?.trim() ||
+    process.env.CHAT2API_ENCRYPTION_KEY?.trim() ||
+    'chat2api-fixed-encryption-key-v1'
+  return createHash('sha256').update(secret).digest()
+}
+
+function encryptWithFallbackCipher(plainText: string): string {
+  const key = getFallbackEncryptionKey()
+  const iv = randomBytes(12)
+  const cipher = createCipheriv('aes-256-gcm', key, iv)
+  const encrypted = Buffer.concat([cipher.update(plainText, 'utf8'), cipher.final()])
+  const authTag = cipher.getAuthTag()
+
+  return `${FALLBACK_ENCRYPTION_PREFIX}${iv.toString('base64')}.${authTag.toString('base64')}.${encrypted.toString('base64')}`
+}
+
+function decryptWithFallbackCipher(payload: string): string {
+  if (!payload.startsWith(FALLBACK_ENCRYPTION_PREFIX)) {
+    return payload
+  }
+
+  const encoded = payload.slice(FALLBACK_ENCRYPTION_PREFIX.length)
+  const [ivB64, authTagB64, dataB64] = encoded.split('.')
+  if (!ivB64 || !authTagB64 || !dataB64) {
+    return payload
+  }
+
+  const key = getFallbackEncryptionKey()
+  const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(ivB64, 'base64'))
+  decipher.setAuthTag(Buffer.from(authTagB64, 'base64'))
+  const decrypted = Buffer.concat([
+    decipher.update(Buffer.from(dataB64, 'base64')),
+    decipher.final(),
+  ])
+  return decrypted.toString('utf8')
 }
 
 let cachedSafeStorage: SafeStorageLike | null = null
@@ -419,17 +461,15 @@ class StoreManager {
    */
   encryptData(data: string): string {
     try {
-      console.log('[Store] encryptData input length:', data.length)
       const safeStorage = getSafeStorage()
       if (safeStorage.isEncryptionAvailable()) {
         // Create new Buffer to store encryption result
         const encrypted = Buffer.from(safeStorage.encryptString(data))
-        const result = encrypted.toString('base64')
-        console.log('[Store] encryptData output length:', result.length)
-        return result
-      } else {
-        console.log('[Store] Encryption unavailable, returning original data')
+        return encrypted.toString('base64')
       }
+
+      // In pure Node/web runtime, fall back to AES encryption instead of plain text.
+      return encryptWithFallbackCipher(data)
     } catch (error) {
       console.error('Failed to encrypt data:', error)
     }
@@ -448,6 +488,8 @@ class StoreManager {
         const buffer = Buffer.from(encryptedData, 'base64')
         return safeStorage.decryptString(buffer)
       }
+
+      return decryptWithFallbackCipher(encryptedData)
     } catch (error) {
       console.error('Failed to decrypt data:', error)
     }
