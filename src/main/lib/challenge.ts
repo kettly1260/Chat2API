@@ -1,6 +1,5 @@
 import fs from 'fs'
 import path from 'path'
-import { app } from 'electron'
 
 export class DeepSeekHash {
   private wasmInstance: any
@@ -129,13 +128,10 @@ let deepSeekHashInstance: DeepSeekHash | null = null
 
 function resolveWasmPath(): string {
   const candidates: string[] = []
-  const electronApp = app as any
-  const hasElectronApp = !!electronApp && typeof electronApp === 'object'
-  const appPath = hasElectronApp && typeof electronApp.getAppPath === 'function'
-    ? electronApp.getAppPath()
-    : undefined
+  const hasResourcesPath = typeof (process as any).resourcesPath === 'string' && (process as any).resourcesPath.length > 0
+  const appPath = typeof process.cwd === 'function' ? process.cwd() : undefined
 
-  if (hasElectronApp && electronApp.isPackaged && process.resourcesPath) {
+  if (hasResourcesPath && (process as any).resourcesPath) {
     candidates.push(path.join(process.resourcesPath, 'sha3_wasm_bg.7b9ca65ddd.wasm'))
   }
 

@@ -6,6 +6,7 @@
 
 import { homedir } from 'os'
 import { join } from 'path'
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'fs'
 import {
   StoreSchema,
   AppConfig,
@@ -48,6 +49,12 @@ type SafeStorageLike = {
   decryptString: (value: Buffer) => string
 }
 
+type StoreLike = {
+  get: (key: string) => any
+  set: (key: string, value: any) => void
+  clear: () => void
+}
+
 const fallbackSafeStorage: SafeStorageLike = {
   isEncryptionAvailable: () => false,
   encryptString: (value: string) => Buffer.from(value, 'utf8'),
@@ -61,17 +68,6 @@ function getSafeStorage(): SafeStorageLike {
     return cachedSafeStorage
   }
 
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const electron = require('electron') as { safeStorage?: SafeStorageLike }
-    if (electron?.safeStorage) {
-      cachedSafeStorage = electron.safeStorage
-      return cachedSafeStorage
-    }
-  } catch {
-    // Running in pure Node mode (no Electron runtime)
-  }
-
   cachedSafeStorage = fallbackSafeStorage
   return cachedSafeStorage
 }
@@ -79,7 +75,62 @@ function getSafeStorage(): SafeStorageLike {
 /**
  * Storage Instance Type Definition
  */
-type StoreType = any
+type StoreType = StoreLike
+
+class JsonStore implements StoreLike {
+  private readonly filePath: string
+  private data: Record<string, any>
+
+  constructor(storagePath: string, defaults: StoreSchema) {
+    mkdirSync(storagePath, { recursive: true })
+    this.filePath = join(storagePath, 'data.json')
+    this.data = this.load(defaults)
+  }
+
+  get(key: string): any {
+    return this.data[key]
+  }
+
+  set(key: string, value: any): void {
+    this.data[key] = value
+    this.persist()
+  }
+
+  clear(): void {
+    this.data = {}
+    this.persist()
+  }
+
+  private load(defaults: StoreSchema): Record<string, any> {
+    if (!existsSync(this.filePath)) {
+      return { ...defaults }
+    }
+
+    try {
+      const raw = readFileSync(this.filePath, 'utf8')
+      const parsed = raw ? JSON.parse(raw) : {}
+      return { ...defaults, ...parsed }
+    } catch (error) {
+      console.error('[Store] Failed to read web storage, using defaults:', error)
+      try {
+        const backupPath = join(
+          this.filePath.replace(/data\.json$/, ''),
+          `data.corrupted.${Date.now()}.json`,
+        )
+        if (existsSync(this.filePath)) {
+          renameSync(this.filePath, backupPath)
+        }
+      } catch {
+        // Ignore backup errors in web mode.
+      }
+      return { ...defaults }
+    }
+  }
+
+  private persist(): void {
+    writeFileSync(this.filePath, JSON.stringify(this.data, null, 2), 'utf8')
+  }
+}
 
 /**
  * Storage Manager Class
@@ -118,22 +169,27 @@ class StoreManager {
       return
     }
 
-    // Dynamically import electron-store (ESM module)
-    if (!Store) {
-      const module = await import('electron-store')
-      Store = module.default
-    }
-
     const storagePath = this.getStoragePath()
 
     try {
-      this.store = new Store({
-        name: 'data',
-        cwd: storagePath,
-        defaults: this.getDefaultData(),
-        encryptionKey: this.getEncryptionKey(),
-        clearInvalidConfig: true,
-      })
+      if (this.isWebMode()) {
+        this.store = new JsonStore(storagePath, this.getDefaultData())
+      } else {
+        // Dynamically import electron-store (ESM module) only for desktop mode.
+        if (!Store) {
+          const moduleName = 'electron-store'
+          const module = await import(moduleName)
+          Store = module.default
+        }
+
+        this.store = new Store({
+          name: 'data',
+          cwd: storagePath,
+          defaults: this.getDefaultData(),
+          encryptionKey: this.getEncryptionKey(),
+          clearInvalidConfig: true,
+        })
+      }
 
       await this.initializeDefaultProviders()
       this.isInitialized = true
@@ -145,13 +201,17 @@ class StoreManager {
       // Try to recover by backing up corrupted data and reinitializing
       try {
         await this.recoverFromCorruptedData(storagePath)
-        this.store = new Store({
-          name: 'data',
-          cwd: storagePath,
-          defaults: this.getDefaultData(),
-          encryptionKey: this.getEncryptionKey(),
-          clearInvalidConfig: true,
-        })
+        if (this.isWebMode()) {
+          this.store = new JsonStore(storagePath, this.getDefaultData())
+        } else {
+          this.store = new Store({
+            name: 'data',
+            cwd: storagePath,
+            defaults: this.getDefaultData(),
+            encryptionKey: this.getEncryptionKey(),
+            clearInvalidConfig: true,
+          })
+        }
         this.isInitialized = true
         this.initializationError = null
         console.log('[Store] Successfully recovered from corrupted data')
@@ -167,9 +227,6 @@ class StoreManager {
    * Backup the corrupted file and create a new one
    */
   private async recoverFromCorruptedData(storagePath: string): Promise<void> {
-    const { renameSync, existsSync } = await import('fs')
-    const { join } = await import('path')
-    
     const dataPath = join(storagePath, 'data.json')
     const backupPath = join(storagePath, `data.corrupted.${Date.now()}.json`)
     
