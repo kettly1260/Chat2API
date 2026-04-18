@@ -4,3 +4,4 @@
 change_me_before_production
 YOUR_SECRET_KEY
 ci_secret
+your-api-key

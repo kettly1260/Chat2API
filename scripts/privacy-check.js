@@ -19,6 +19,46 @@ function getStagedFiles() {
     .filter(Boolean)
 }
 
+function getStagedAddedLines(filePath) {
+  let diff = ''
+  try {
+    diff = run(`git diff --cached --unified=0 -- "${filePath}"`)
+  } catch {
+    return []
+  }
+
+  if (!diff) return []
+
+  const added = []
+  const lines = diff.split(/\r?\n/)
+  let lineNumber = 0
+
+  for (const raw of lines) {
+    if (raw.startsWith('@@')) {
+      const match = raw.match(/\+(\d+)(?:,(\d+))?/)
+      lineNumber = match ? Number(match[1]) : 0
+      continue
+    }
+
+    if (raw.startsWith('+++') || raw.startsWith('---')) {
+      continue
+    }
+
+    if (raw.startsWith('+')) {
+      const content = raw.slice(1)
+      added.push({ lineNumber, content })
+      lineNumber += 1
+      continue
+    }
+
+    if (!raw.startsWith('-')) {
+      lineNumber += 1
+    }
+  }
+
+  return added
+}
+
 function isTextLike(filePath) {
   const binaryLike = [
     '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.pdf', '.zip', '.7z',
@@ -40,6 +80,12 @@ function loadIgnorePatterns() {
 
 function isIgnored(line, ignorePatterns) {
   return ignorePatterns.some((p) => line.includes(p))
+}
+
+function isPlaceholder(line) {
+  return /(your[-_ ]?api[-_ ]?key|your[-_ ]?token|your[-_ ]?secret|example[-_ ]?key|dummy[-_ ]?key|test[-_ ]?key|placeholder)/i.test(
+    line
+  )
 }
 
 const checks = [
@@ -65,24 +111,17 @@ function main() {
   for (const file of files) {
     if (!fs.existsSync(file)) continue
 
-    let content = ''
-    try {
-      content = fs.readFileSync(file, 'utf8')
-    } catch {
-      continue
-    }
+    const addedLines = getStagedAddedLines(file)
 
-    const lines = content.split(/\r?\n/)
-
-    lines.forEach((line, idx) => {
-      if (isIgnored(line, ignorePatterns)) return
+    addedLines.forEach(({ lineNumber, content }) => {
+      if (isIgnored(content, ignorePatterns) || isPlaceholder(content)) return
       for (const check of checks) {
-        if (check.regex.test(line)) {
+        if (check.regex.test(content)) {
           findings.push({
             file,
-            line: idx + 1,
+            line: lineNumber || 1,
             check: check.name,
-            content: line.slice(0, 220)
+            content: content.slice(0, 220)
           })
           break
         }
