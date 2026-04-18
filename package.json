@@ -15,7 +15,7 @@
     "dev:headless": "electron-vite dev -- --headless-service",
     "dev:web": "electron-vite build && node ./out/main/web.js",
     "build": "electron-vite build",
-    "build:web": "electron-vite build && node scripts/build-web.js",
+    "build:web": "electron-vite build",
     "preview": "electron-vite preview",
     "start": "electron-vite preview",
     "start:headless": "electron-vite preview -- --headless-service",
