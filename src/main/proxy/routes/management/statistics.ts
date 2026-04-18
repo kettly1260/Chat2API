@@ -123,6 +123,10 @@ interface LogsQueryParams {
   type?: 'system' | 'request'
 }
 
+interface ClearLogsRequest {
+  type?: 'system' | 'request'
+}
+
 router.get('/logs', async (ctx: Context) => {
   try {
     const query = ctx.query as LogsQueryParams
@@ -194,6 +198,36 @@ router.get('/logs', async (ctx: Context) => {
         }
       }>
     }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    ctx.status = 500
+    ctx.body = {
+      success: false,
+      error: {
+        code: 'internal_error',
+        message: errorMessage,
+      },
+    } as ManagementApiResponse
+  }
+})
+
+router.post('/logs/clear', async (ctx: Context) => {
+  try {
+    const body = (ctx.request.body || {}) as ClearLogsRequest
+    const logType = body.type || 'request'
+
+    if (logType === 'system') {
+      storeManager.clearLogs()
+    } else {
+      storeManager.clearRequestLogs()
+    }
+
+    ctx.body = {
+      success: true,
+      data: {
+        type: logType,
+      },
+    } as ManagementApiResponse<{ type: 'system' | 'request' }>
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     ctx.status = 500

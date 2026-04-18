@@ -369,7 +369,10 @@ const webElectronAPI: any = {
     },
     getAccountTrend: async (_accountId: string, _days?: number) => [],
     clear: async () => {
-      throw new Error('Clearing logs is not supported in Web mode yet')
+      await request('/v0/management/logs/clear', {
+        method: 'POST',
+        body: { type: 'system' },
+      })
     },
     export: async (format?: 'json' | 'txt') => {
       const logs = await webElectronAPI.logs.get({ limit: 1000 })
@@ -432,7 +435,10 @@ const webElectronAPI: any = {
       }))
     },
     clear: async () => {
-      throw new Error('Clearing request logs is not supported in Web mode yet')
+      await request('/v0/management/logs/clear', {
+        method: 'POST',
+        body: { type: 'request' },
+      })
     },
     onNewLog: () => NOOP_UNSUBSCRIBE,
   },

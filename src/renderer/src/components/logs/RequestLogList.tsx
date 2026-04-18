@@ -153,11 +153,15 @@ export function RequestLogList() {
   }, [logs.length])
 
   const handleClearLogs = async () => {
-    await window.electronAPI?.requestLogs?.clear()
-    logsRef.current = []
-    setLogs([])
-    fetchStats()
-    setShowClearDialog(false)
+    try {
+      await window.electronAPI?.requestLogs?.clear()
+      logsRef.current = []
+      setLogs([])
+      fetchStats()
+      setShowClearDialog(false)
+    } catch (error) {
+      console.error('Failed to clear request logs:', error)
+    }
   }
 
   const handleSelectLog = useCallback((log: RequestLogEntry) => {
