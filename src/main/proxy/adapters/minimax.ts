@@ -335,6 +335,8 @@ export class MiniMaxAdapter {
     const fullUri = `${uri}${uri.lastIndexOf('?') != -1 ? '&' : '?'}${queryStr}`
     const yy = md5(`${encodeURIComponent(fullUri)}_${dataJson}${md5(unix)}ooui`)
     const signature = md5(`${timestamp}${this.jwtToken}${dataJson}`)
+    const headerUserId = identityMode === 'anonymous' ? '' : realUserID
+    const headerDeviceId = identityMode === 'legacy' ? '' : (deviceInfo.deviceId || '')
 
     console.log(
       '[MiniMax] Request - mode:',
@@ -357,8 +359,8 @@ export class MiniMaxAdapter {
         Referer: `${AGENT_BASE_URL}/`,
         token: this.jwtToken,
         Authorization: `Bearer ${this.jwtToken}`,
-        'x-user-id': realUserID,
-        'x-device-id': deviceInfo.deviceId || '',
+        'x-user-id': headerUserId,
+        'x-device-id': headerDeviceId,
         ...FAKE_HEADERS,
         'Content-Type': 'application/json',
         'x-timestamp': String(timestamp),
@@ -993,16 +995,38 @@ export class MiniMaxAdapter {
 
   async getCredits(): Promise<CreditInfo> {
     try {
-      const deviceInfo = await this.requestDeviceInfo()
-      
-      const response = await this.request('POST', '/matrix/api/v1/commerce/get_membership_info', {}, deviceInfo)
-      
-      console.log('[MiniMax] get_membership_info status:', response.status)
-      
+      let deviceInfo = await this.requestDeviceInfo()
+
+      const membershipUri = '/matrix/api/v1/commerce/get_membership_info'
+      const tryRequest = async (mode: IdentityMode) => {
+        const response = await this.request('POST', membershipUri, {}, deviceInfo, mode)
+        console.log(`[MiniMax] get_membership_info status (${mode}):`, response.status)
+        return response
+      }
+
+      let response = await tryRequest('device')
+
+      if (response.status === 401) {
+        console.warn('[MiniMax] get_membership_info 401, refreshing device info and retrying...')
+        deviceInfo = await this.requestDeviceInfo(true)
+        response = await this.request('POST', membershipUri, {}, deviceInfo, 'device')
+        console.log('[MiniMax] get_membership_info status (device-refreshed):', response.status)
+
+        if (response.status === 401) {
+          console.warn('[MiniMax] get_membership_info still 401, retrying with legacy identity mode...')
+          response = await tryRequest('legacy')
+        }
+
+        if (response.status === 401) {
+          console.warn('[MiniMax] get_membership_info still 401, retrying with anonymous identity mode...')
+          response = await tryRequest('anonymous')
+        }
+      }
+
       if (response.status === 200 && response.data?.base_resp?.status_code === 0) {
         const data = response.data
         const remainingCredits = data?.daily_login_gift_credit_remaining || 0
-        
+
         // Get credit expires timestamp (resets at next day 00:00)
         let expiresAt: number | undefined = undefined
         const creditsData = data?.credits?.['4']?.[0]
@@ -1010,12 +1034,12 @@ export class MiniMaxAdapter {
           // expires_at is in milliseconds, use it directly
           expiresAt = creditsData.expires_at
         }
-        
+
         if (expiresAt) {
           console.log('[MiniMax] Credit expires at:', new Date(expiresAt).toISOString())
         }
         console.log('[MiniMax] Credits:', { remainingCredits, expiresAt: expiresAt ? new Date(expiresAt).toISOString() : undefined })
-        
+
         return {
           totalCredits: 0, // Not available
           usedCredits: 0, // Not available
