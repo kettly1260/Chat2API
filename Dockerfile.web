@@ -22,6 +22,7 @@ COPY package.json package-lock.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /tmp/electron ./node_modules/electron
 COPY --from=build /app/out ./out
+COPY --from=build /app/sha3_wasm_bg.7b9ca65ddd.wasm ./sha3_wasm_bg.7b9ca65ddd.wasm
 
 ENV NODE_ENV=production
 ENV CHAT2API_WEB_UI=1
