@@ -168,7 +168,10 @@ export function AddAccountDialog({
 
   const isEditing = !!editingAccount
   const builtinProvider = provider as BuiltinProviderConfig | null
-  const credentialFields: CredentialField[] = builtinProvider?.credentialFields || getDefaultCredentialFields(provider?.authType, t)
+  const credentialFields: CredentialField[] =
+    builtinProvider?.credentialFields?.length
+      ? builtinProvider.credentialFields
+      : getDefaultCredentialFields(provider?.authType, t, provider?.id)
   const isWebRuntime = typeof window !== 'undefined' && /^https?:$/.test(window.location.protocol)
   const supportsOAuth =
     !isWebRuntime &&
@@ -778,7 +781,30 @@ function CredentialFieldsForm({ fields, credentials, onChange, t, providerId }: 
   )
 }
 
-function getDefaultCredentialFields(authType?: string, t?: (key: string) => string): CredentialField[] {
+function getDefaultCredentialFields(
+  authType?: string,
+  t?: (key: string) => string,
+  providerId?: string
+): CredentialField[] {
+  if (providerId === 'minimax') {
+    return [
+      {
+        name: 'token',
+        label: t ? t('minimax.token') : 'JWT Token',
+        type: 'password',
+        required: true,
+        placeholder: t ? t('minimax.tokenPlaceholder') : 'Enter MiniMax JWT Token',
+      },
+      {
+        name: 'realUserID',
+        label: t ? t('minimax.realUserID') : 'Real User ID (Optional)',
+        type: 'text',
+        required: false,
+        placeholder: t ? t('minimax.realUserIDPlaceholder') : 'Enter Real User ID (optional)',
+      },
+    ]
+  }
+
   const fieldConfigs: Record<string, CredentialField[]> = {
     token: [
       {
@@ -818,9 +844,9 @@ function getDefaultCredentialFields(authType?: string, t?: (key: string) => stri
     ],
     jwt: [
       {
-        name: 'jwt',
+        name: 'token',
         label: 'JWT Token',
-        type: 'textarea',
+        type: 'password',
         required: true,
         placeholder: t ? t('providers.enterJwtToken') : 'Enter JWT Token (starts with eyJ)',
       },
