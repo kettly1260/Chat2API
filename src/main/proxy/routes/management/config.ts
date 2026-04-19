@@ -20,6 +20,12 @@ router.use(managementAuthMiddleware)
 const SENSITIVE_KEYS = ['managementApiSecret', 'apiKeys', 'credentials']
 const MASKED_SECRET = '***'
 
+function isWebMode(): boolean {
+  const value = process.env.CHAT2API_WEB_UI || process.env.WEB_UI_ENABLED
+  if (!value) return false
+  return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase())
+}
+
 function restoreMaskedApiKeys(incomingApiKeys: unknown, currentApiKeys: AppConfig['apiKeys']): AppConfig['apiKeys'] | null {
   if (!Array.isArray(incomingApiKeys)) {
     return null
@@ -114,11 +120,11 @@ function maskConfig(config: AppConfig): Record<string, unknown> {
 router.get('/', async (ctx: Context) => {
   try {
     const config = ConfigManager.get()
-    const maskedConfig = maskConfig(config)
+    const responseConfig = isWebMode() ? config : maskConfig(config)
 
     ctx.body = {
       success: true,
-      data: maskedConfig,
+      data: responseConfig,
     } as ManagementApiResponse<Record<string, unknown>>
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
@@ -185,11 +191,11 @@ router.put('/', async (ctx: Context) => {
     }
 
     const updatedConfig = ConfigManager.update(normalizedUpdates as Partial<AppConfig>)
-    const maskedConfig = maskConfig(updatedConfig)
+    const responseConfig = isWebMode() ? updatedConfig : maskConfig(updatedConfig)
 
     ctx.body = {
       success: true,
-      data: maskedConfig,
+      data: responseConfig,
     } as ManagementApiResponse<Record<string, unknown>>
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
@@ -223,11 +229,11 @@ router.get('/:key', async (ctx: Context) => {
     }
 
     const value = config[key]
-    const maskedValue = maskSensitiveValue(value, key)
+    const responseValue = isWebMode() ? value : maskSensitiveValue(value, key)
 
     ctx.body = {
       success: true,
-      data: maskedValue,
+      data: responseValue,
     } as ManagementApiResponse<unknown>
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'

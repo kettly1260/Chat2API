@@ -18,6 +18,8 @@ type RequestOptions = {
 
 const NOOP_UNSUBSCRIBE = () => {}
 const MANAGEMENT_SECRET_KEY = 'chat2api.managementSecret'
+const API_KEY_CACHE_KEY = 'chat2api.apiKeySecrets'
+const ACCOUNT_CREDENTIAL_CACHE_KEY = 'chat2api.accountCredentialSecrets'
 const MASKED_SECRET = '***'
 let runtimeManagementSecretOverride: string | null = null
 
@@ -28,6 +30,123 @@ function isWebRuntime(): boolean {
 function normalizeSecret(secret: string | null | undefined): string {
   const normalized = (secret || '').trim()
   return normalized === MASKED_SECRET ? '' : normalized
+}
+
+function isMaskedValue(value: unknown): boolean {
+  return typeof value === 'string' && value.trim() === MASKED_SECRET
+}
+
+function safeReadStorage<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return fallback
+    return JSON.parse(raw) as T
+  } catch {
+    return fallback
+  }
+}
+
+function safeWriteStorage<T>(key: string, value: T): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    // Ignore storage errors in restricted browser contexts.
+  }
+}
+
+function getApiKeySecretMap(): Record<string, string> {
+  return safeReadStorage<Record<string, string>>(API_KEY_CACHE_KEY, {})
+}
+
+function setApiKeySecretMap(map: Record<string, string>): void {
+  safeWriteStorage(API_KEY_CACHE_KEY, map)
+}
+
+function cacheApiKeysFromConfig(configLike: any): void {
+  if (!configLike || !Array.isArray(configLike.apiKeys)) return
+
+  const map = getApiKeySecretMap()
+  for (const apiKey of configLike.apiKeys) {
+    if (!apiKey || typeof apiKey !== 'object') continue
+    const id = typeof apiKey.id === 'string' ? apiKey.id : ''
+    const key = typeof apiKey.key === 'string' ? apiKey.key : ''
+    if (!id || !key || isMaskedValue(key)) continue
+    map[id] = key
+  }
+  setApiKeySecretMap(map)
+}
+
+function hydrateApiKeys(configLike: any): void {
+  if (!configLike || !Array.isArray(configLike.apiKeys)) return
+
+  const map = getApiKeySecretMap()
+  configLike.apiKeys = configLike.apiKeys.map((apiKey: any) => {
+    if (!apiKey || typeof apiKey !== 'object') return apiKey
+    const id = typeof apiKey.id === 'string' ? apiKey.id : ''
+    const key = typeof apiKey.key === 'string' ? apiKey.key : ''
+    if (id && isMaskedValue(key) && map[id]) {
+      return {
+        ...apiKey,
+        key: map[id],
+      }
+    }
+    return apiKey
+  })
+}
+
+function getAccountCredentialMap(): Record<string, Record<string, string>> {
+  return safeReadStorage<Record<string, Record<string, string>>>(ACCOUNT_CREDENTIAL_CACHE_KEY, {})
+}
+
+function setAccountCredentialMap(map: Record<string, Record<string, string>>): void {
+  safeWriteStorage(ACCOUNT_CREDENTIAL_CACHE_KEY, map)
+}
+
+function cacheAccountCredentials(accountId: string, credentials: unknown): void {
+  if (!accountId || !credentials || typeof credentials !== 'object') return
+
+  const source = credentials as Record<string, unknown>
+  const filtered: Record<string, string> = {}
+  for (const [key, value] of Object.entries(source)) {
+    if (typeof value !== 'string') continue
+    if (!value.trim() || isMaskedValue(value)) continue
+    filtered[key] = value
+  }
+
+  if (Object.keys(filtered).length === 0) return
+
+  const map = getAccountCredentialMap()
+  map[accountId] = {
+    ...(map[accountId] || {}),
+    ...filtered,
+  }
+  setAccountCredentialMap(map)
+}
+
+function hydrateAccountCredentials(account: any): any {
+  if (!account || typeof account !== 'object') return account
+  const accountId = typeof account.id === 'string' ? account.id : ''
+  const credentials = account.credentials
+  if (!accountId || !credentials || typeof credentials !== 'object') return account
+
+  const cached = getAccountCredentialMap()[accountId]
+  if (!cached) return account
+
+  const nextCredentials: Record<string, unknown> = { ...(credentials as Record<string, unknown>) }
+  let changed = false
+  for (const [field, value] of Object.entries(nextCredentials)) {
+    if (isMaskedValue(value) && cached[field]) {
+      nextCredentials[field] = cached[field]
+      changed = true
+    }
+  }
+
+  return changed
+    ? {
+        ...account,
+        credentials: nextCredentials,
+      }
+    : account
 }
 
 function getBaseUrl(): string {
@@ -171,10 +290,33 @@ async function requestInternal<T>(path: string, options: RequestOptions, prompte
 }
 
 async function getConfig(): Promise<AppConfig> {
-  return request<AppConfig>('/v0/management/config')
+  const config = await request<AppConfig>('/v0/management/config')
+  const hydrated = { ...(config as any) }
+  hydrateApiKeys(hydrated)
+
+  const rawSecret = (hydrated.managementApi?.managementApiSecret ?? '') as string
+  const localSecret = getManagementSecret()
+  if (localSecret) {
+    hydrated.managementApi = {
+      ...(hydrated.managementApi || {}),
+      managementApiSecret: localSecret,
+    }
+  } else if (!isMaskedValue(rawSecret) && typeof rawSecret === 'string' && rawSecret.trim()) {
+    setManagementSecret(rawSecret)
+  }
+
+  cacheApiKeysFromConfig(hydrated)
+  return hydrated as AppConfig
 }
 
 async function updateConfig(updates: Partial<AppConfig> & Record<string, unknown>): Promise<boolean> {
+  cacheApiKeysFromConfig(updates)
+  const maybeMgmt = (updates as any)?.managementApi
+  const maybeSecret = maybeMgmt?.managementApiSecret
+  if (typeof maybeSecret === 'string' && !isMaskedValue(maybeSecret) && maybeSecret.trim()) {
+    setManagementSecret(maybeSecret)
+  }
+
   await request('/v0/management/config', {
     method: 'PUT',
     body: updates,
@@ -296,11 +438,33 @@ const webElectronAPI: any = {
   },
 
   accounts: {
-    getAll: async () => request('/v0/management/accounts'),
-    getById: async (id: string) => request(`/v0/management/accounts/${id}`),
-    getByProvider: async (providerId: string) => request(`/v0/management/providers/${providerId}/accounts`),
-    add: async (data: any) => request('/v0/management/accounts', { method: 'POST', body: data }),
-    update: async (id: string, updates: any) => request(`/v0/management/accounts/${id}`, { method: 'PUT', body: updates }),
+    getAll: async () => {
+      const accounts = await request<any[]>('/v0/management/accounts')
+      return accounts.map((account) => hydrateAccountCredentials(account))
+    },
+    getById: async (id: string) => {
+      const account = await request<any>(`/v0/management/accounts/${id}`)
+      return hydrateAccountCredentials(account)
+    },
+    getByProvider: async (providerId: string) => {
+      const accounts = await request<any[]>(`/v0/management/providers/${providerId}/accounts`)
+      return accounts.map((account) => hydrateAccountCredentials(account))
+    },
+    add: async (data: any) => {
+      const created = await request<any>('/v0/management/accounts', { method: 'POST', body: data })
+      const accountId = typeof created?.id === 'string' ? created.id : ''
+      if (accountId && data?.credentials) {
+        cacheAccountCredentials(accountId, data.credentials)
+      }
+      return hydrateAccountCredentials(created)
+    },
+    update: async (id: string, updates: any) => {
+      if (id && updates?.credentials) {
+        cacheAccountCredentials(id, updates.credentials)
+      }
+      const updated = await request<any>(`/v0/management/accounts/${id}`, { method: 'PUT', body: updates })
+      return hydrateAccountCredentials(updated)
+    },
     delete: async (id: string) => {
       await request(`/v0/management/accounts/${id}`, { method: 'DELETE' })
       return true
