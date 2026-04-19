@@ -168,10 +168,12 @@ export function AddAccountDialog({
 
   const isEditing = !!editingAccount
   const builtinProvider = provider as BuiltinProviderConfig | null
-  const credentialFields: CredentialField[] =
-    builtinProvider?.credentialFields?.length
-      ? builtinProvider.credentialFields
-      : getDefaultCredentialFields(provider?.authType, t, provider?.id)
+  const credentialFields: CredentialField[] = normalizeCredentialFields(
+    provider?.id,
+    builtinProvider?.credentialFields,
+    getDefaultCredentialFields(provider?.authType, t, provider?.id),
+    t,
+  )
   const isWebRuntime = typeof window !== 'undefined' && /^https?:$/.test(window.location.protocol)
   const supportsOAuth =
     !isWebRuntime &&
@@ -537,7 +539,6 @@ interface CredentialFieldsFormProps {
 function CredentialFieldsForm({ fields, credentials, onChange, t, providerId }: CredentialFieldsFormProps) {
   const [visibleFields, setVisibleFields] = useState<Record<string, boolean>>({})
   const [copiedFields, setCopiedFields] = useState<Record<string, boolean>>({})
-  const [showOptionalFields, setShowOptionalFields] = useState(false)
 
   const toggleFieldVisibility = (fieldName: string) => {
     setVisibleFields(prev => ({
@@ -658,17 +659,7 @@ function CredentialFieldsForm({ fields, credentials, onChange, t, providerId }: 
 
   return (
     <div className="space-y-4">
-      {fields.some(field => !field.required && !credentials[field.name]?.trim()) && !showOptionalFields && (
-        <Button
-          type="button"
-          variant="ghost"
-          className="px-0 text-sm text-muted-foreground hover:text-foreground"
-          onClick={() => setShowOptionalFields(true)}
-        >
-          Show optional fields
-        </Button>
-      )}
-      {fields.filter(field => field.required || showOptionalFields || !!credentials[field.name]?.trim()).map((field) => {
+      {fields.map((field) => {
         const translated = getFieldTranslation(field)
         const isPasswordField = field.type === 'password'
         const isVisible = visibleFields[field.name]
@@ -854,6 +845,46 @@ function getDefaultCredentialFields(
   }
 
   return fieldConfigs[authType || 'token'] || fieldConfigs.token
+}
+
+function normalizeCredentialFields(
+  providerId: string | undefined,
+  configuredFields: CredentialField[] | undefined,
+  fallbackFields: CredentialField[],
+  t: (key: string) => string,
+): CredentialField[] {
+  const baseFields = configuredFields?.length ? [...configuredFields] : [...fallbackFields]
+
+  if (providerId !== 'minimax') {
+    return baseFields
+  }
+
+  const hasToken = baseFields.some((field) => field.name === 'token')
+  const hasRealUserID = baseFields.some((field) => field.name === 'realUserID')
+
+  if (!hasToken) {
+    baseFields.unshift({
+      name: 'token',
+      label: t('minimax.token'),
+      type: 'password',
+      required: true,
+      placeholder: t('minimax.tokenPlaceholder'),
+      helpText: t('minimax.tokenHelp'),
+    })
+  }
+
+  if (!hasRealUserID) {
+    baseFields.push({
+      name: 'realUserID',
+      label: t('minimax.realUserID'),
+      type: 'text',
+      required: false,
+      placeholder: t('minimax.realUserIDPlaceholder'),
+      helpText: t('minimax.realUserIDHelp'),
+    })
+  }
+
+  return baseFields
 }
 
 export default AddAccountDialog

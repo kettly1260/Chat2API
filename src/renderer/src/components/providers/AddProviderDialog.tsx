@@ -162,7 +162,6 @@ export function AddProviderDialog({
   const [expandedModels, setExpandedModels] = useState<Set<string>>(new Set())
   const [activeTab, setActiveTab] = useState<string>('manual')
   const [credentials, setCredentials] = useState<Record<string, string>>({})
-  const [showOptionalFields, setShowOptionalFields] = useState(false)
   const [isValidating, setIsValidating] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isOAuthLoading, setIsOAuthLoading] = useState(false)
@@ -447,7 +446,6 @@ export function AddProviderDialog({
       setCredentials({})
       setValidationResult({})
       setActiveTab('manual')
-      setShowOptionalFields(false)
       setIsOAuthLoading(false)
       setOAuthStatus('')
       setVisibleFields({})
@@ -626,7 +624,6 @@ export function AddProviderDialog({
     setCredentials({})
     setValidationResult({})
     setActiveTab('manual')
-    setShowOptionalFields(false)
     setOAuthStatus('')
   }
 
@@ -634,21 +631,10 @@ export function AddProviderDialog({
     if (!selectedProviderData) return null
 
     const credentialFields = selectedProviderData.credentialFields || []
-    const hiddenOptionalFields = credentialFields.some(field => !field.required && !credentials[field.name]?.trim())
-    const visibleCredentialFields = credentialFields.filter(field => field.required || showOptionalFields || !!credentials[field.name]?.trim())
+    const visibleCredentialFields = credentialFields
 
     return (
       <div className="space-y-4">
-        {hiddenOptionalFields && (
-          <Button
-            type="button"
-            variant="ghost"
-            className="px-0 text-sm text-muted-foreground hover:text-foreground"
-            onClick={() => setShowOptionalFields(true)}
-          >
-            Show optional fields
-          </Button>
-        )}
         {visibleCredentialFields.map((field) => {
           const getFieldTranslation = () => {
             const translations: Record<string, Record<string, { label: string; placeholder: string; helpText: string }>> = {
