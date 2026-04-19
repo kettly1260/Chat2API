@@ -12,11 +12,12 @@ services:
     environment:
       CHAT2API_WEB_UI: "1"
       WEB_UI_ENABLED: "1"
-      WEB_UI_DIR: "/app/out/renderer"
       WEB_PROXY_HOST: "0.0.0.0"
       WEB_PROXY_PORT: "18181"
       WEB_MANAGEMENT_ENABLED: "1"
       WEB_MANAGEMENT_SECRET: "change_me_before_production"
+      CHAT2API_STORAGE_DIR: "/root/.chat2api"
+      CHAT2API_STORAGE_SECRET: "change_me_before_production"
     volumes:
       - chat2api_data:/root/.chat2api
     restart: unless-stopped
