@@ -262,9 +262,9 @@ export class MimoAdapter {
   private getCredentials(): { serviceToken: string; userId: string; phToken: string } {
     const credentials = this.account.credentials
     return {
-      serviceToken: credentials.service_token || '',
-      userId: credentials.user_id || '',
-      phToken: credentials.ph_token || '',
+      serviceToken: credentials.service_token || credentials.serviceToken || '',
+      userId: credentials.user_id || credentials.userId || '',
+      phToken: credentials.ph_token || credentials.xiaomichatbot_ph || '',
     }
   }
 

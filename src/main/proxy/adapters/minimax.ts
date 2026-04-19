@@ -126,6 +126,12 @@ function unixTimestamp(): number {
 
 function tokenSplit(authorization: string): string[] {
   const token = authorization.replace('Bearer ', '')
+
+  // Support both legacy `realUserID+JWT` and `realUserID_JWT` formats.
+  const prefixedTokenMatch = token.match(/^([^+_]+)[+_](eyJ[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+)$/)
+  if (prefixedTokenMatch) {
+    return [token]
+  }
   
   // Check if it's realUserID+JWTtoken format (contains +)
   if (token.includes('+')) {
@@ -208,11 +214,11 @@ export class MiniMaxAdapter {
       const fullToken = tokens[0]
 
       // Check if token is in realUserID+JWTtoken format
-      if (fullToken.includes('+')) {
-        const parts = fullToken.split('+')
-        this.realUserID = parts[0]
-        this.jwtToken = parts[1]
-        console.log('[MiniMax] Token contains realUserID+JWT format, realUserID:', this.realUserID)
+      const prefixedTokenMatch = fullToken.match(/^([^+_]+)[+_](eyJ[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+)$/)
+      if (prefixedTokenMatch) {
+        this.realUserID = prefixedTokenMatch[1]
+        this.jwtToken = prefixedTokenMatch[2]
+        console.log('[MiniMax] Token contains prefixed realUserID+JWT format, realUserID:', this.realUserID)
       } else {
         // Just JWT token, parse userID from it
         this.jwtToken = fullToken

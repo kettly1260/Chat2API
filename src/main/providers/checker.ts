@@ -138,8 +138,8 @@ export class ProviderChecker {
         return this.checkKimiToken(account.credentials.token)
       case 'minimax':
         return this.checkMiniMaxToken(
-          account.credentials.realUserID || '',
-          account.credentials.token
+          account.credentials.realUserID || account.credentials.real_user_id || '',
+          account.credentials.token || account.credentials.jwtToken || account.credentials.authorization || ''
         )
       case 'qwen':
         return this.checkQwenToken(account.credentials.ticket)
@@ -149,9 +149,9 @@ export class ProviderChecker {
         return this.checkPerplexityToken(account.credentials.sessionToken || account.credentials.token)
       case 'mimo':
         return this.checkMimoToken(
-          account.credentials.service_token,
-          account.credentials.user_id,
-          account.credentials.ph_token
+          account.credentials.service_token || account.credentials.serviceToken,
+          account.credentials.user_id || account.credentials.userId,
+          account.credentials.ph_token || account.credentials.xiaomichatbot_ph
         )
       default:
         if (!builtinConfig.tokenCheckEndpoint) {
@@ -161,21 +161,59 @@ export class ProviderChecker {
     }
   }
 
-  private static checkMimoToken(
+  private static async checkMimoToken(
     serviceToken: string,
     userId: string,
     phToken: string
-  ): TokenCheckResult {
+  ): Promise<TokenCheckResult> {
     if (!serviceToken || !userId || !phToken) {
       return { valid: false, error: 'Missing required credentials: service_token, user_id, ph_token' }
     }
 
-    return {
-      valid: true,
-      userInfo: {
-        name: 'Mimo User',
-      },
+    try {
+      const response = await axios.post(
+        'https://aistudio.xiaomimimo.com/open-apis/chat/conversation/list',
+        {
+          pageInfo: {
+            pageNum: 1,
+            pageSize: 1,
+          },
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Cookie: `serviceToken=${serviceToken}; userId=${userId}; xiaomichatbot_ph=${phToken}`,
+            Origin: 'https://aistudio.xiaomimimo.com',
+            Referer: 'https://aistudio.xiaomimimo.com/',
+          },
+          params: {
+            xiaomichatbot_ph: phToken,
+          },
+          timeout: CHECK_TIMEOUT,
+          validateStatus: () => true,
+        }
+      )
+
+      if (response.status === 200 && response.data?.code === 0) {
+        return {
+          valid: true,
+          userInfo: {
+            name: 'Mimo User',
+          },
+        }
+      }
+
+      return {
+        valid: false,
+        error: response.data?.msg || response.data?.message || `Validation failed: HTTP ${response.status}`,
+      }
+    } catch (error) {
+      return {
+        valid: false,
+        error: error instanceof AxiosError ? error.message : 'Connection failed',
+      }
     }
+
   }
 
   private static async checkDeepSeekToken(token: string): Promise<TokenCheckResult> {
@@ -370,7 +408,7 @@ export class ProviderChecker {
   }
 
   private static async checkMiniMaxToken(
-    _realUserID: string,
+    providedRealUserID: string,
     token: string
   ): Promise<TokenCheckResult> {
     try {
@@ -381,10 +419,10 @@ export class ProviderChecker {
       let realUserID = ''
       let jwtToken = token
       
-      if (token.includes('+')) {
-        const parts = token.split('+')
-        realUserID = parts[0]
-        jwtToken = parts[1]
+      const prefixedTokenMatch = token.match(/^([^+_]+)[+_](eyJ[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+)$/)
+      if (prefixedTokenMatch) {
+        realUserID = prefixedTokenMatch[1]
+        jwtToken = prefixedTokenMatch[2]
       } else {
         try {
           const parts = token.split('.')
@@ -405,6 +443,11 @@ export class ProviderChecker {
         }
       }
       
+      if (!realUserID && providedRealUserID?.trim()) {
+        realUserID = providedRealUserID.trim()
+        console.log('[MiniMax] Using provided realUserID for validation:', realUserID)
+      }
+
       if (!realUserID) {
         return { valid: false, error: 'Cannot extract user ID from token' }
       }
