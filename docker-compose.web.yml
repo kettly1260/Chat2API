@@ -16,10 +16,10 @@ services:
       WEB_PROXY_PORT: "18181"
       WEB_MANAGEMENT_ENABLED: "1"
       WEB_MANAGEMENT_SECRET: "change_me_before_production"
-      CHAT2API_STORAGE_DIR: "/root/.chat2api"
+      CHAT2API_STORAGE_DIR: "/root/.chat2api-web"
       CHAT2API_STORAGE_SECRET: "change_me_before_production"
     volumes:
-      - chat2api_data:/root/.chat2api
+      - chat2api_data:/root/.chat2api-web
     restart: unless-stopped
 
 volumes:
