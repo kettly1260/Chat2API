@@ -5,13 +5,13 @@
 
 import Router from '@koa/router'
 import type { Context } from 'koa'
-import axios from 'axios'
 import { managementAuthMiddleware } from '../../middleware/managementAuth'
 import ProviderManager from '../../../store/providers'
 import AccountManager from '../../../store/accounts'
 import { ProviderChecker } from '../../../providers/checker'
-import { getBuiltinProviders, getBuiltinProvider } from '../../../providers/builtin'
+import { getBuiltinProviders } from '../../../providers/builtin'
 import { CustomProviderManager } from '../../../providers/custom'
+import { syncProviderModels } from '../../../providers/modelSync'
 import { storeManager } from '../../../store/store'
 import type {
   Provider,
@@ -182,94 +182,29 @@ router.post('/:id/update-models', async (ctx: Context) => {
       return
     }
 
-    let modelsApiEndpoint: string | undefined
-    let modelsApiHeaders: Record<string, string> | undefined
-
-    if (provider.type === 'builtin') {
-      const builtinConfig = getBuiltinProvider(providerId)
-      if (builtinConfig) {
-        modelsApiEndpoint = builtinConfig.modelsApiEndpoint
-        modelsApiHeaders = builtinConfig.modelsApiHeaders
-      }
-    }
-
-    if (!modelsApiEndpoint) {
-      ctx.status = 400
-      ctx.body = createErrorResponse('unsupported', 'This provider does not support dynamic model updates')
-      return
-    }
-
-    const accounts = AccountManager.getByProviderId(providerId, true)
-    const activeAccount = accounts.find((a) => a.status === 'active')
-
-    const requestHeaders: Record<string, string> = {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      ...modelsApiHeaders,
-    }
-
-    if (activeAccount?.credentials?.token) {
-      requestHeaders.Authorization = `Bearer ${activeAccount.credentials.token}`
-    }
-
-    if (activeAccount?.credentials?.cookies) {
-      requestHeaders.Cookie = activeAccount.credentials.cookies
-    }
-
-    const response = await axios.get(modelsApiEndpoint, {
-      headers: requestHeaders,
-      timeout: 15000,
-      validateStatus: () => true,
-    })
-
-    if (response.status !== 200) {
-      ctx.status = 502
-      ctx.body = createErrorResponse('upstream_error', `Failed to fetch models: HTTP ${response.status}`)
-      return
-    }
-
-    const models = response.data.data || response.data
-    if (!Array.isArray(models) || models.length === 0) {
-      ctx.status = 400
-      ctx.body = createErrorResponse('invalid_response', 'No models found in upstream response')
-      return
-    }
-
-    const supportedModels: string[] = []
-    const modelMappings: Record<string, string> = {}
-
-    models.forEach((model: any) => {
-      if (typeof model === 'string') {
-        supportedModels.push(model)
-        modelMappings[model] = model
-      } else if (model && typeof model === 'object') {
-        const modelId = model.id || model.model_id || model.name
-        const modelName = model.name || model.display_name || modelId
-        if (modelId) {
-          supportedModels.push(modelName || modelId)
-          modelMappings[modelName || modelId] = modelId
-        }
-      }
-    })
-
-    if (supportedModels.length === 0) {
-      ctx.status = 400
-      ctx.body = createErrorResponse('parse_error', 'Failed to parse models from upstream response')
-      return
-    }
-
-    ProviderManager.update(providerId, {
-      supportedModels,
-      modelMappings,
-    })
+    const result = await syncProviderModels(providerId, { force: true })
 
     ctx.set('Content-Type', 'application/json')
     ctx.body = createSuccessResponse({
       success: true,
-      modelsCount: supportedModels.length,
+      modelsCount: result.modelsCount,
     })
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Failed to update models'
+    if (
+      errorMessage.includes('No active account') ||
+      errorMessage.includes('does not support dynamic model updates') ||
+      errorMessage.includes('No models found')
+    ) {
+      ctx.status = 400
+      ctx.body = createErrorResponse('invalid_request', errorMessage)
+      return
+    }
+    if (errorMessage.includes('Failed to fetch models: HTTP')) {
+      ctx.status = 502
+      ctx.body = createErrorResponse('upstream_error', errorMessage)
+      return
+    }
     ctx.status = 500
     ctx.body = createErrorResponse('internal_error', errorMessage)
   }
@@ -278,6 +213,14 @@ router.post('/:id/update-models', async (ctx: Context) => {
 router.get('/:id/effective-models', async (ctx: Context) => {
   try {
     const providerId = ctx.params.id
+    try {
+      await syncProviderModels(providerId)
+    } catch (error) {
+      console.warn(
+        `[ProvidersRoute] Failed to auto-sync models for provider ${providerId}:`,
+        error instanceof Error ? error.message : error
+      )
+    }
     const models = storeManager.getEffectiveModels(providerId)
     ctx.set('Content-Type', 'application/json')
     ctx.body = createSuccessResponse(models)

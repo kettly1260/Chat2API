@@ -9,6 +9,7 @@ import { managementAuthMiddleware } from '../../middleware/managementAuth'
 import AccountManager from '../../../store/accounts'
 import ProviderManager from '../../../store/providers'
 import { validateCredentials } from '../../../store/validator'
+import { syncProviderModels } from '../../../providers/modelSync'
 import type { 
   Account, 
   CreateAccountRequest, 
@@ -170,6 +171,15 @@ router.post('/accounts', managementAuthMiddleware, async (ctx: Context) => {
       credentials: request.credentials,
       dailyLimit: request.dailyLimit,
     })
+
+    try {
+      await syncProviderModels(request.providerId, { force: true })
+    } catch (error) {
+      console.warn(
+        `[AccountsRoute] Failed to sync models after account creation for provider ${request.providerId}:`,
+        error instanceof Error ? error.message : error
+      )
+    }
     
     const responseAccount = isWebMode() ? account : maskCredentials(account)
     ctx.status = 201
@@ -229,6 +239,15 @@ router.put('/accounts/:id', managementAuthMiddleware, async (ctx: Context) => {
       ctx.body = createErrorResponse('update_failed', 'Failed to update account')
       return
     }
+
+    try {
+      await syncProviderModels(updatedAccount.providerId, { force: true })
+    } catch (error) {
+      console.warn(
+        `[AccountsRoute] Failed to sync models after account update for provider ${updatedAccount.providerId}:`,
+        error instanceof Error ? error.message : error
+      )
+    }
     
     const responseAccount = isWebMode() ? updatedAccount : maskCredentials(updatedAccount)
     ctx.set('Content-Type', 'application/json')
@@ -281,6 +300,17 @@ router.post('/accounts/:id/validate', managementAuthMiddleware, async (ctx: Cont
     }
     
     const validationResult: ValidationResult = await AccountManager.validate(id)
+
+    if (validationResult.valid) {
+      try {
+        await syncProviderModels(existingAccount.providerId, { force: true })
+      } catch (error) {
+        console.warn(
+          `[AccountsRoute] Failed to sync models after account validation for provider ${existingAccount.providerId}:`,
+          error instanceof Error ? error.message : error
+        )
+      }
+    }
     
     ctx.set('Content-Type', 'application/json')
     ctx.body = createSuccessResponse(validationResult)

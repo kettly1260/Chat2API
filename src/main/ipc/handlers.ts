@@ -7,6 +7,7 @@ import { AccountManager } from '../store/accounts'
 import { ProviderChecker } from '../providers/checker'
 import { CustomProviderManager } from '../providers/custom'
 import { getBuiltinProviders, getBuiltinProvider } from '../providers/builtin'
+import { syncProviderModels } from '../providers/modelSync'
 import { oauthManager } from '../oauth/manager'
 import { ProxyServer } from '../proxy/server'
 import { proxyStatusManager } from '../proxy/status'
@@ -363,20 +364,15 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow | null): Pro
     error?: string
   }> => {
     try {
-      const result = await ProviderChecker.fetchProviderModels(providerId)
-      
+      await syncProviderModels(providerId, { force: true })
       const provider = ProviderManager.getById(providerId)
-      if (provider) {
-        ProviderManager.update(providerId, {
-          supportedModels: result.supportedModels,
-          modelMappings: result.modelMappings,
-        })
-      }
+      const supportedModels = provider?.supportedModels || []
+      const modelMappings = provider?.modelMappings || {}
 
       return {
         success: true,
-        supportedModels: result.supportedModels,
-        modelMappings: result.modelMappings,
+        supportedModels,
+        modelMappings,
       }
     } catch (error) {
       return {
@@ -392,105 +388,11 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow | null): Pro
     error?: string
   }> => {
     try {
-      const provider = ProviderManager.getById(providerId)
-      
-      if (!provider) {
-        return {
-          success: false,
-          error: 'Provider not found',
-        }
-      }
-
-      let modelsApiEndpoint: string | undefined
-      let modelsApiHeaders: Record<string, string> | undefined
-
-      if (provider.type === 'builtin') {
-        const builtinConfig = getBuiltinProvider(providerId)
-        if (builtinConfig) {
-          modelsApiEndpoint = builtinConfig.modelsApiEndpoint
-          modelsApiHeaders = builtinConfig.modelsApiHeaders
-        }
-      }
-
-      if (!modelsApiEndpoint) {
-        return {
-          success: false,
-          error: 'This provider does not support dynamic model updates',
-        }
-      }
-
-      const accounts = AccountManager.getByProviderId(providerId, true)
-      const activeAccount = accounts.find(a => a.status === 'active')
-      
-      const requestHeaders: Record<string, string> = {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        ...modelsApiHeaders,
-      }
-      
-      if (activeAccount?.credentials?.token) {
-        requestHeaders['Authorization'] = `Bearer ${activeAccount.credentials.token}`
-      }
-      
-      if (activeAccount?.credentials?.cookies) {
-        requestHeaders['Cookie'] = activeAccount.credentials.cookies
-      }
-
-      const response = await axios.get(modelsApiEndpoint, {
-        headers: requestHeaders,
-        timeout: 15000,
-        validateStatus: () => true,
-      })
-
-      if (response.status !== 200) {
-        return {
-          success: false,
-          error: `Failed to fetch models: HTTP ${response.status}`,
-        }
-      }
-
-      const models = response.data.data || response.data
-
-      if (!Array.isArray(models) || models.length === 0) {
-        return {
-          success: false,
-          error: 'No models found in the response',
-        }
-      }
-
-      const supportedModels: string[] = []
-      const modelMappings: Record<string, string> = {}
-
-      models.forEach((model: any) => {
-        if (typeof model === 'string') {
-          supportedModels.push(model)
-          modelMappings[model] = model
-        } else if (model && typeof model === 'object') {
-          const modelId = model.id || model.model_id || model.name
-          const modelName = model.name || model.display_name || modelId
-          
-          if (modelId) {
-            supportedModels.push(modelName || modelId)
-            modelMappings[modelName || modelId] = modelId
-          }
-        }
-      })
-
-      if (supportedModels.length === 0) {
-        return {
-          success: false,
-          error: 'Failed to parse models from the response',
-        }
-      }
-
-      ProviderManager.update(providerId, {
-        supportedModels,
-        modelMappings,
-      })
+      const result = await syncProviderModels(providerId, { force: true })
 
       return {
         success: true,
-        modelsCount: supportedModels.length,
+        modelsCount: result.modelsCount,
       }
     } catch (error) {
       console.error('[IPC] Failed to update models:', error)
@@ -503,6 +405,14 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow | null): Pro
 
   ipcMain.handle(IpcChannels.PROVIDERS_GET_EFFECTIVE_MODELS, async (_, providerId: string) => {
     try {
+      try {
+        await syncProviderModels(providerId)
+      } catch (error) {
+        console.warn(
+          `[IPC] Failed to auto-sync models for provider ${providerId}:`,
+          error instanceof Error ? error.message : error
+        )
+      }
       return storeManager.getEffectiveModels(providerId)
     } catch (error) {
       console.error('[IPC] Failed to get effective models:', error)
@@ -577,11 +487,31 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow | null): Pro
     credentials: Record<string, string>
     dailyLimit?: number
   }): Promise<Account> => {
-    return AccountManager.create(data)
+    const account = AccountManager.create(data)
+    try {
+      await syncProviderModels(data.providerId, { force: true })
+    } catch (error) {
+      console.warn(
+        `[IPC] Failed to sync models after account creation for provider ${data.providerId}:`,
+        error instanceof Error ? error.message : error
+      )
+    }
+    return account
   })
 
   ipcMain.handle(IpcChannels.ACCOUNTS_UPDATE, async (_, id: string, updates: Partial<Account>): Promise<Account | null> => {
-    return AccountManager.update(id, updates)
+    const updatedAccount = AccountManager.update(id, updates)
+    if (updatedAccount) {
+      try {
+        await syncProviderModels(updatedAccount.providerId, { force: true })
+      } catch (error) {
+        console.warn(
+          `[IPC] Failed to sync models after account update for provider ${updatedAccount.providerId}:`,
+          error instanceof Error ? error.message : error
+        )
+      }
+    }
+    return updatedAccount
   })
 
   ipcMain.handle(IpcChannels.ACCOUNTS_DELETE, async (_, id: string): Promise<boolean> => {
@@ -590,6 +520,19 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow | null): Pro
 
   ipcMain.handle(IpcChannels.ACCOUNTS_VALIDATE, async (_, accountId: string): Promise<boolean> => {
     const result = await AccountManager.validate(accountId)
+    if (result.valid) {
+      const account = AccountManager.getById(accountId, true)
+      if (account) {
+        try {
+          await syncProviderModels(account.providerId, { force: true })
+        } catch (error) {
+          console.warn(
+            `[IPC] Failed to sync models after account validation for provider ${account.providerId}:`,
+            error instanceof Error ? error.message : error
+          )
+        }
+      }
+    }
     return result.valid
   })
 

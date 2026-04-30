@@ -8,6 +8,7 @@ import type { Context } from 'koa'
 import { ModelsResponse, ModelInfo } from '../types'
 import { storeManager } from '../../store/store'
 import { getBuiltinProvider } from '../../providers/builtin'
+import { syncProviderModels } from '../../providers/modelSync'
 
 const router = new Router({ prefix: '/v1' })
 
@@ -35,6 +36,10 @@ function hasActiveAccount(providerId: string): boolean {
   return accounts.some(account => account.status === 'active')
 }
 
+async function autoSyncProviderModels(providerIds: string[]): Promise<void> {
+  await Promise.allSettled(providerIds.map((providerId) => syncProviderModels(providerId)))
+}
+
 /**
  * Get all available models
  */
@@ -42,6 +47,7 @@ router.get('/models', async (ctx: Context) => {
   const providers = storeManager
     .getProviders()
     .filter(provider => provider.enabled && hasActiveAccount(provider.id))
+  await autoSyncProviderModels(providers.map((provider) => provider.id))
   const models: ModelInfo[] = []
   const addedModels = new Set<string>()
 
@@ -105,6 +111,7 @@ router.get('/models/:model', async (ctx: Context) => {
   const providers = storeManager
     .getProviders()
     .filter(provider => provider.enabled && hasActiveAccount(provider.id))
+  await autoSyncProviderModels(providers.map((provider) => provider.id))
 
   for (const provider of providers) {
     const displayModels = getProviderDisplayModels(provider.id)
