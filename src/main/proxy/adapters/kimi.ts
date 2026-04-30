@@ -117,7 +117,12 @@ export class KimiAdapter {
   constructor(provider: Provider, account: Account) {
     this.provider = provider
     this.account = account
-    this.token = account.credentials.token || account.credentials.refreshToken || ''
+    this.token =
+      account.credentials.accessToken ||
+      account.credentials.token ||
+      account.credentials.access_token ||
+      account.credentials.refreshToken ||
+      ''
   }
 
   private async acquireToken(): Promise<{ accessToken: string; userId: string }> {

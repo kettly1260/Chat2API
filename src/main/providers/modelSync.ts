@@ -207,6 +207,7 @@ function applyCredentialHeaders(
   const credentials = account.credentials || {}
 
   const token = firstString([
+    credentials.accessToken,
     credentials.token,
     credentials.access_token,
     credentials.jwt,
