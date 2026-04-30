@@ -382,10 +382,12 @@ export function Providers() {
     dailyLimit?: number
   }) => {
     if (!store.selectedProviderId) return
+
+    const providerId = store.selectedProviderId
     
     try {
       const account = await window.electronAPI.accounts.add({
-        providerId: store.selectedProviderId,
+        providerId,
         name: data.name,
         email: data.email,
         credentials: data.credentials,
@@ -393,12 +395,14 @@ export function Providers() {
       })
       store.addAccount(account)
       
-      const providerAccounts = store.getAccountsByProvider(store.selectedProviderId)
+      const providerAccounts = store.getAccountsByProvider(providerId)
       store.updateAccountCount(
-        store.selectedProviderId,
+        providerId,
         providerAccounts.length,
         providerAccounts.filter(a => a.status === 'active').length
       )
+
+      await handleUpdateModels(providerId)
       
       setShowAddAccountDialog(false)
       toast({
@@ -424,12 +428,15 @@ export function Providers() {
         store.updateAccount(id, updates)
         
         if (store.selectedProviderId) {
-          const providerAccounts = store.getAccountsByProvider(store.selectedProviderId)
+          const providerId = store.selectedProviderId
+          const providerAccounts = store.getAccountsByProvider(providerId)
           store.updateAccountCount(
-            store.selectedProviderId,
+            providerId,
             providerAccounts.length,
             providerAccounts.filter(a => a.status === 'active').length
           )
+
+          await handleUpdateModels(providerId)
         }
         
         toast({
@@ -483,12 +490,15 @@ export function Providers() {
         store.updateAccount(id, { status: 'active' })
         
         if (store.selectedProviderId) {
-          const providerAccounts = store.getAccountsByProvider(store.selectedProviderId)
+          const providerId = store.selectedProviderId
+          const providerAccounts = store.getAccountsByProvider(providerId)
           store.updateAccountCount(
-            store.selectedProviderId,
+            providerId,
             providerAccounts.length,
             providerAccounts.filter(a => a.status === 'active').length
           )
+
+          await handleUpdateModels(providerId)
         }
         
         toast({
