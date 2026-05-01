@@ -63,6 +63,14 @@ export interface Provider {
   modelMappings?: Record<string, string>
   status?: ProviderStatus
   lastStatusCheck?: number
+  modelSyncStatus?: ModelSyncStatus
+}
+
+export interface ModelSyncStatus {
+  synced: boolean
+  modelsCount: number
+  lastSyncedAt?: number
+  error?: string
 }
 
 export interface ModelMapping {

@@ -16,6 +16,28 @@ export interface ModelSyncResult {
   synced: boolean
   modelsCount: number
   reason?: string
+  error?: string
+}
+
+export interface ModelSyncStatus {
+  synced: boolean
+  modelsCount: number
+  lastSyncedAt?: number
+  error?: string
+}
+
+const syncStatusMap = new Map<string, ModelSyncStatus>()
+
+export function getModelSyncStatus(providerId: string): ModelSyncStatus {
+  return syncStatusMap.get(providerId) || { synced: false, modelsCount: 0 }
+}
+
+export function getAllModelSyncStatus(): Record<string, ModelSyncStatus> {
+  const result: Record<string, ModelSyncStatus> = {}
+  for (const [id, status] of syncStatusMap.entries()) {
+    result[id] = status
+  }
+  return result
 }
 
 interface SyncOptions {
@@ -584,23 +606,41 @@ async function doSync(provider: Provider): Promise<ModelSyncResult> {
   const activeAccount = accounts.find((account) => account.status === 'active')
 
   if (!activeAccount) {
-    throw new Error('No active account for model synchronization')
+    const error = 'No active account for model synchronization'
+    syncStatusMap.set(providerId, { synced: false, modelsCount: provider.supportedModels?.length || 0, error })
+    throw new Error(error)
   }
 
-  const sources = await buildModelSourceRequests(provider, activeAccount)
-  const { supportedModels, modelMappings } = await fetchModelsFromSources(sources)
-  ProviderManager.update(providerId, {
-    supportedModels,
-    modelMappings,
-  })
+  try {
+    const sources = await buildModelSourceRequests(provider, activeAccount)
+    const { supportedModels, modelMappings } = await fetchModelsFromSources(sources)
+    ProviderManager.update(providerId, {
+      supportedModels,
+      modelMappings,
+    })
 
-  const now = Date.now()
-  lastSyncedAt.set(providerId, now)
+    const now = Date.now()
+    lastSyncedAt.set(providerId, now)
+    syncStatusMap.set(providerId, {
+      synced: true,
+      modelsCount: supportedModels.length,
+      lastSyncedAt: now,
+    })
 
-  return {
-    providerId,
-    synced: true,
-    modelsCount: supportedModels.length,
+    return {
+      providerId,
+      synced: true,
+      modelsCount: supportedModels.length,
+    }
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    syncStatusMap.set(providerId, {
+      synced: false,
+      modelsCount: provider.supportedModels?.length || 0,
+      error: errorMsg,
+      lastSyncedAt: lastSyncedAt.get(providerId),
+    })
+    throw error
   }
 }
 
@@ -635,5 +675,19 @@ export async function syncProviderModels(
   inFlightSync.set(providerId, task)
 
   return task
+}
+
+export async function syncAllProviderModels(): Promise<void> {
+  const providers = ProviderManager.getEnabled()
+  for (const provider of providers) {
+    try {
+      await syncProviderModels(provider.id, { force: true })
+    } catch (error) {
+      console.warn(
+        `[ModelSync] Auto-sync failed for ${provider.id}:`,
+        error instanceof Error ? error.message : error
+      )
+    }
+  }
 }
 

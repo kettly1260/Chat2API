@@ -11,7 +11,7 @@ import AccountManager from '../../../store/accounts'
 import { ProviderChecker } from '../../../providers/checker'
 import { getBuiltinProviders } from '../../../providers/builtin'
 import { CustomProviderManager } from '../../../providers/custom'
-import { syncProviderModels } from '../../../providers/modelSync'
+import { syncProviderModels, getModelSyncStatus, getAllModelSyncStatus } from '../../../providers/modelSync'
 import { storeManager } from '../../../store/store'
 import type {
   Provider,
@@ -94,9 +94,26 @@ router.post('/check-all-status', async (ctx: Context) => {
 router.get('/', async (ctx: Context) => {
   try {
     const providers = ProviderManager.getAll()
+    
+    const syncResults = await Promise.allSettled(
+      providers
+        .filter(p => p.enabled && hasActiveAccount(p.id))
+        .map(p => syncProviderModels(p.id).catch(() => null))
+    )
+    
+    const freshProviders = ProviderManager.getAll()
+    const syncStatuses = getAllModelSyncStatus()
+    
+    const providersWithSync = freshProviders.map(p => {
+      const syncStatus = syncStatuses[p.id]
+      return {
+        ...p,
+        modelSyncStatus: syncStatus || { synced: false, modelsCount: p.supportedModels?.length || 0 },
+      }
+    })
 
     ctx.set('Content-Type', 'application/json')
-    ctx.body = createSuccessResponse(providers)
+    ctx.body = createSuccessResponse(providersWithSync)
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Failed to get providers'
     ctx.status = 500

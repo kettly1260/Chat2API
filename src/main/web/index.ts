@@ -1,6 +1,7 @@
 import { resolve } from 'path'
 import { generateManagementSecret } from '../proxy/middleware/managementAuth'
 import { storeManager } from '../store/store'
+import { syncAllProviderModels } from '../providers/modelSync'
 import type { ProxyServer } from '../proxy/server'
 
 let activeProxyServer: ProxyServer | null = null
@@ -105,6 +106,10 @@ async function bootstrap(): Promise<void> {
   console.log(`[Web] Chat2API Web service bound to http://${bindHost}:${port}`)
   console.log(`[Web] Local Management API: http://${accessHost}:${port}/v0/management`)
   console.log(`[Web] Local Web UI: http://${accessHost}:${port}/`)
+  
+  syncAllProviderModels().catch((error) => {
+    console.warn('[Web] Background model sync failed:', error instanceof Error ? error.message : error)
+  })
 }
 
 async function shutdown(signal: string): Promise<void> {
