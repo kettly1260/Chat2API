@@ -94,17 +94,9 @@ router.post('/check-all-status', async (ctx: Context) => {
 router.get('/', async (ctx: Context) => {
   try {
     const providers = ProviderManager.getAll()
-    
-    const syncResults = await Promise.allSettled(
-      providers
-        .filter(p => p.enabled && hasActiveAccount(p.id))
-        .map(p => syncProviderModels(p.id).catch(() => null))
-    )
-    
-    const freshProviders = ProviderManager.getAll()
     const syncStatuses = getAllModelSyncStatus()
     
-    const providersWithSync = freshProviders.map(p => {
+    const providersWithSync = providers.map(p => {
       const syncStatus = syncStatuses[p.id]
       return {
         ...p,

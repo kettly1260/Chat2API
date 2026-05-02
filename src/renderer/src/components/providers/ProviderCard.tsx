@@ -135,12 +135,6 @@ export function ProviderCard({
             <CardDescription className="text-xs mt-1">
               {getProviderDescription() || `${provider.supportedModels?.length || 0} ${t('providers.models').toLowerCase()}`}
             </CardDescription>
-            {provider.modelSyncStatus?.error && (
-              <p className="flex items-center gap-1 text-xs text-red-500 dark:text-red-400 mt-1 truncate max-w-[300px]" title={provider.modelSyncStatus.error}>
-                <Info className="h-3 w-3 flex-shrink-0" />
-                <span className="truncate">{provider.modelSyncStatus.error}</span>
-              </p>
-            )}
             {provider.id === 'perplexity' && (
               <p className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 mt-1">
                 <Info className="h-3 w-3 flex-shrink-0" />
