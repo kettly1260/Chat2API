@@ -380,22 +380,22 @@ class StoreManager {
       if (p.type === 'builtin') {
         const builtinConfig = BUILTIN_PROVIDERS.find(bp => bp.id === p.id)
         if (builtinConfig) {
-          const hasUserOverrides = userModelOverrides[p.id] && 
-            ((userModelOverrides[p.id].addedModels && userModelOverrides[p.id].addedModels.length > 0) ||
-             (userModelOverrides[p.id].excludedModels && userModelOverrides[p.id].excludedModels.length > 0))
-          const persistedSupportedModels = Array.isArray(p.supportedModels) && p.supportedModels.length > 0
-            ? p.supportedModels
-            : builtinConfig.supportedModels
-          const persistedModelMappings = p.modelMappings && Object.keys(p.modelMappings).length > 0
-            ? p.modelMappings
-            : builtinConfig.modelMappings
+          const persistedSupportedModels = Array.isArray(p.supportedModels) ? p.supportedModels : []
+          const mergedSupportedModels = Array.from(new Set([
+            ...(builtinConfig.supportedModels || []),
+            ...persistedSupportedModels,
+          ]))
+          const mergedModelMappings = {
+            ...(p.modelMappings || {}),
+            ...(builtinConfig.modelMappings || {}),
+          }
           
           return { 
             ...p, 
             apiEndpoint: builtinConfig.apiEndpoint,
             chatPath: builtinConfig.chatPath,
-            supportedModels: hasUserOverrides ? p.supportedModels : persistedSupportedModels,
-            modelMappings: hasUserOverrides ? p.modelMappings : persistedModelMappings,
+            supportedModels: mergedSupportedModels,
+            modelMappings: mergedModelMappings,
             headers: builtinConfig.headers,
             description: builtinConfig.description,
           }
