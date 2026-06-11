@@ -19,7 +19,8 @@ import type {
   ApiKey,
   SystemPrompt,
   PromptType,
-  ToolPromptConfig,
+  ToolCallingConfig,
+  LegacyToolPromptConfig,
   EffectiveModel,
 } from '../../../shared/types'
 
@@ -44,7 +45,8 @@ export type {
   ApiKey,
   SystemPrompt,
   PromptType,
-  ToolPromptConfig,
+  ToolCallingConfig,
+  LegacyToolPromptConfig,
   EffectiveModel,
 }
 
@@ -252,7 +254,7 @@ interface UpdateStatus {
 
 interface AppAPI {
   getVersion: () => Promise<string>
-  checkUpdate: () => Promise<{ hasUpdate: boolean; currentVersion: string; latestVersion: string; releaseUrl?: string; error?: string }>
+  checkUpdate: () => Promise<UpdateStatus>
   downloadUpdate: () => Promise<void>
   installUpdate: () => Promise<void>
   getUpdateStatus: () => Promise<UpdateStatus>
@@ -261,7 +263,7 @@ interface AppAPI {
   onUpdateNotAvailable: (callback: (info: UpdateDownloadedInfo) => void) => () => void
   onUpdateProgress: (callback: (progress: UpdateProgressInfo) => void) => () => void
   onUpdateDownloaded: (callback: (info: UpdateDownloadedInfo) => void) => () => void
-  onUpdateError: (callback: (error: string) => void) => () => void
+  onUpdateError: (callback: (error: { message?: string } | string) => void) => () => void
   minimize: () => Promise<void>
   maximize: () => Promise<void>
   close: () => Promise<void>
@@ -455,6 +457,11 @@ interface ContextManagementAPI {
   updateConfig: (updates: Partial<ContextManagementConfig>) => Promise<ContextManagementConfig>
 }
 
+interface ToolCallingAPI {
+  getStatus: () => Promise<unknown>
+  runSmoke: (input: { clientAdapterId: string }) => Promise<{ success: boolean; data?: unknown; error?: { message?: string } }>
+}
+
 interface ElectronAPI {
   proxy: ProxyAPI
   store: StoreAPI
@@ -470,6 +477,7 @@ interface ElectronAPI {
   session: SessionAPI
   managementApi: ManagementApiAPI
   contextManagement: ContextManagementAPI
+  toolCalling: ToolCallingAPI
   tray: TrayAPI
   on: (channel: string, callback: (...args: unknown[]) => void) => () => void
   send: (channel: string, ...args: unknown[]) => void

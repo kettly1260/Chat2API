@@ -404,6 +404,25 @@ const statisticsAPI = {
     ipcRenderer.invoke(IpcChannels.STATISTICS_GET_TODAY),
 }
 
+interface UpdateProgressInfo {
+  percent: number
+  bytesPerSecond: number
+  transferred: number
+  total: number
+}
+
+interface UpdateStatus {
+  checking: boolean
+  available: boolean
+  downloading: boolean
+  downloaded: boolean
+  error: string | null
+  progress: UpdateProgressInfo | null
+  version: string | null
+  releaseDate: string | null
+  releaseNotes: string | null
+}
+
 const appAPI = {
   getVersion: (): Promise<string> => 
     ipcRenderer.invoke(IpcChannels.APP_GET_VERSION),
@@ -426,7 +445,7 @@ const appAPI = {
   openExternal: (url: string): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.APP_OPEN_EXTERNAL, url),
 
-  checkUpdate: (): Promise<{ hasUpdate: boolean; currentVersion: string; latestVersion: string; releaseUrl?: string; error?: string }> =>
+  checkUpdate: (): Promise<UpdateStatus> =>
     ipcRenderer.invoke(IpcChannels.APP_CHECK_UPDATE),
 
   downloadUpdate: (): Promise<void> =>
@@ -435,7 +454,7 @@ const appAPI = {
   installUpdate: (): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.APP_INSTALL_UPDATE),
 
-  getUpdateStatus: (): Promise<any> =>
+  getUpdateStatus: (): Promise<UpdateStatus> =>
     ipcRenderer.invoke(IpcChannels.APP_GET_UPDATE_STATUS),
 
   onUpdateChecking: (callback: () => void) => {
@@ -456,8 +475,8 @@ const appAPI = {
     return () => ipcRenderer.removeListener(IpcChannels.APP_UPDATE_NOT_AVAILABLE, listener)
   },
 
-  onUpdateProgress: (callback: (progress: any) => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, progress: any) => callback(progress)
+  onUpdateProgress: (callback: (progress: UpdateProgressInfo) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, progress: UpdateProgressInfo) => callback(progress)
     ipcRenderer.on(IpcChannels.APP_UPDATE_PROGRESS, listener)
     return () => ipcRenderer.removeListener(IpcChannels.APP_UPDATE_PROGRESS, listener)
   },
@@ -468,8 +487,8 @@ const appAPI = {
     return () => ipcRenderer.removeListener(IpcChannels.APP_UPDATE_DOWNLOADED, listener)
   },
 
-  onUpdateError: (callback: (error: any) => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, error: any) => callback(error)
+  onUpdateError: (callback: (error: { message?: string } | string) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, error: { message?: string } | string) => callback(error)
     ipcRenderer.on(IpcChannels.APP_UPDATE_ERROR, listener)
     return () => ipcRenderer.removeListener(IpcChannels.APP_UPDATE_ERROR, listener)
   },
@@ -614,6 +633,46 @@ const contextManagementAPI = {
     ipcRenderer.invoke(IpcChannels.CONTEXT_MANAGEMENT_UPDATE_CONFIG, updates),
 }
 
+function resolveLocalManagementApiBaseUrl(config: AppConfig): string {
+  const configuredHost = config.proxyHost || '127.0.0.1'
+  const host = configuredHost === '0.0.0.0' || configuredHost === '::' || configuredHost === '[::]'
+    ? '127.0.0.1'
+    : configuredHost
+
+  return `http://${host}:${config.proxyPort}/v0/management`
+}
+
+const toolCallingAPI = {
+  async getStatus() {
+    const config = await configAPI.get()
+    const secret = config.managementApi?.managementApiSecret
+    if (!secret) return null
+
+    const response = await fetch(`${resolveLocalManagementApiBaseUrl(config)}/tool-calling/status`, {
+      headers: { Authorization: `Bearer ${secret}` },
+    })
+    return response.json()
+  },
+
+  async runSmoke(input: { clientAdapterId: string }) {
+    const config = await configAPI.get()
+    const secret = config.managementApi?.managementApiSecret
+    if (!secret) {
+      return { success: false, error: { message: 'Management API secret is not configured.' } }
+    }
+
+    const response = await fetch(`${resolveLocalManagementApiBaseUrl(config)}/tool-calling/smoke`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${secret}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(input),
+    })
+    return response.json()
+  },
+}
+
 const trayAPI = {
   openDashboard: (): void => 
     ipcRenderer.send('tray:open-dashboard'),
@@ -640,6 +699,7 @@ const electronAPI = {
   session: sessionAPI,
   managementApi: managementApiAPI,
   contextManagement: contextManagementAPI,
+  toolCalling: toolCallingAPI,
   tray: trayAPI,
   
   on: (channel: string, callback: (...args: unknown[]) => void) => {

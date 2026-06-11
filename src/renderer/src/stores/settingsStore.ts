@@ -67,9 +67,14 @@ export const useSettingsStore = create<SettingsState>()(
         }
       },
       language: 'en-US',
-      setLanguage: (language) => {
+      setLanguage: async (language) => {
         set({ language })
-        i18n.changeLanguage(language)
+        await i18n.changeLanguage(language)
+        try {
+          await window.electronAPI.config.update({ language: language })
+        } catch (error) {
+          console.error('Failed to update language:', error)
+        }
       },
       autoStart: false,
       setAutoStart: async (enabled) => {
@@ -111,7 +116,16 @@ export const useSettingsStore = create<SettingsState>()(
         const currentConfig = get().config
         if (!currentConfig) return
         
-        const newConfig = { ...currentConfig, ...updates }
+        const newConfig = {
+          ...currentConfig,
+          ...updates,
+          requestLogConfig: updates.requestLogConfig
+            ? {
+                ...currentConfig.requestLogConfig,
+                ...updates.requestLogConfig,
+              }
+            : currentConfig.requestLogConfig,
+        }
         set({ config: newConfig })
         
         try {
@@ -129,6 +143,7 @@ export const useSettingsStore = create<SettingsState>()(
             autoStart: config.autoStart,
             autoStartProxy: config.autoStartProxy,
             oauthProxyMode: config.oauthProxyMode || 'system',
+            language: config.language || 'en-US',
           })
         } catch (error) {
           console.error('Failed to fetch config:', error)

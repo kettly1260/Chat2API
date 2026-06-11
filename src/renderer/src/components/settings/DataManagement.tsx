@@ -8,6 +8,7 @@ import { useSettingsStore, LogLevel } from '@/stores/settingsStore'
 import { useToast } from '@/hooks/use-toast'
 import { Database, Download, Upload, Trash2, RotateCcw, AlertTriangle } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
   DialogContent,
@@ -20,12 +21,40 @@ import {
 
 export function DataManagement() {
   const { t } = useTranslation()
-  const { logLevel, setLogLevel, logRetentionDays, setLogRetentionDays, maxLogs, setMaxLogs } = useSettingsStore()
+  const {
+    logLevel,
+    setLogLevel,
+    logRetentionDays,
+    setLogRetentionDays,
+    maxLogs,
+    setMaxLogs,
+    config,
+    updateConfig,
+  } = useSettingsStore()
   const { toast } = useToast()
   const [isExporting, setIsExporting] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
   const [isClearing, setIsClearing] = useState(false)
   const [isResetting, setIsResetting] = useState(false)
+
+  const requestLogConfig = config?.requestLogConfig ?? {
+    enabled: true,
+    maxEntries: 200,
+    includeBodies: false,
+    maxBodyChars: 8000,
+    redactSensitiveData: true,
+  }
+
+  const updateRequestLogConfig = async (
+    updates: Partial<typeof requestLogConfig>,
+  ) => {
+    await updateConfig({
+      requestLogConfig: {
+        ...requestLogConfig,
+        ...updates,
+      },
+    })
+  }
 
   const handleExportConfig = async () => {
     setIsExporting(true)
@@ -189,6 +218,89 @@ export function DataManagement() {
               />
               <p className="text-xs text-muted-foreground">{t('settings.maxLogsHelp')}</p>
             </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-between rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-4">
+              <div className="space-y-1">
+                <Label htmlFor="request-log-enabled">{t('settings.requestLogEnabled')}</Label>
+                <p className="text-xs text-muted-foreground">{t('settings.requestLogEnabledHelp')}</p>
+              </div>
+              <Switch
+                id="request-log-enabled"
+                checked={requestLogConfig.enabled}
+                onCheckedChange={(checked) => {
+                  void updateRequestLogConfig({ enabled: checked })
+                }}
+              />
+            </div>
+
+            {requestLogConfig.enabled ? (
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <div className="space-y-2 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3">
+                  <Label htmlFor="request-log-max-entries">{t('settings.requestLogMaxEntries')}</Label>
+                  <Input
+                    id="request-log-max-entries"
+                    type="number"
+                    min={0}
+                    max={10000}
+                    value={requestLogConfig.maxEntries}
+                    onChange={(e) => {
+                      void updateRequestLogConfig({ maxEntries: parseInt(e.target.value, 10) || 0 })
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">{t('settings.requestLogMaxEntriesHelp')}</p>
+                </div>
+
+                <div className="flex items-center justify-between rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3">
+                  <div className="space-y-1 pr-3">
+                    <Label htmlFor="request-log-bodies">{t('settings.requestLogIncludeBodies')}</Label>
+                    <p className="text-xs text-muted-foreground">{t('settings.requestLogIncludeBodiesHelp')}</p>
+                  </div>
+                  <Switch
+                    id="request-log-bodies"
+                    checked={requestLogConfig.includeBodies}
+                    onCheckedChange={(checked) => {
+                      void updateRequestLogConfig({
+                        includeBodies: checked,
+                        maxBodyChars: checked ? Math.max(requestLogConfig.maxBodyChars, 8000) : requestLogConfig.maxBodyChars,
+                      })
+                    }}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3">
+                  <div className="space-y-1 pr-3">
+                    <Label htmlFor="request-log-redact">{t('settings.requestLogRedactSensitive')}</Label>
+                    <p className="text-xs text-muted-foreground">{t('settings.requestLogRedactSensitiveHelp')}</p>
+                  </div>
+                  <Switch
+                    id="request-log-redact"
+                    checked={requestLogConfig.redactSensitiveData}
+                    onCheckedChange={(checked) => {
+                      void updateRequestLogConfig({ redactSensitiveData: checked })
+                    }}
+                  />
+                </div>
+
+                {requestLogConfig.includeBodies ? (
+                  <div className="space-y-2 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-3 md:col-span-2 xl:col-span-3">
+                    <Label htmlFor="request-log-max-body">{t('settings.requestLogMaxBodyChars')}</Label>
+                    <Input
+                      id="request-log-max-body"
+                      type="number"
+                      min={0}
+                      max={1000000}
+                      value={requestLogConfig.maxBodyChars}
+                      onChange={(e) => {
+                        void updateRequestLogConfig({ maxBodyChars: parseInt(e.target.value, 10) || 0 })
+                      }}
+                    />
+                    <p className="text-xs text-muted-foreground">{t('settings.requestLogMaxBodyCharsHelp')}</p>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </CardContent>
       </Card>

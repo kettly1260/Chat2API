@@ -30,6 +30,11 @@ export type LoadBalanceStrategy = 'round-robin' | 'fill-first' | 'failover'
 
 export type Theme = 'light' | 'dark' | 'system'
 
+export type {
+  LegacyToolPromptConfig,
+  ToolCallingConfig,
+} from './toolCalling'
+
 export interface Account {
   id: string
   providerId: string
@@ -102,13 +107,18 @@ export interface AppConfig {
   minimizeToTray: boolean
   logLevel: 'debug' | 'info' | 'warn' | 'error'
   logRetentionDays: number
+  requestLogConfig: RequestLogConfig
   requestTimeout: number
   retryCount: number
   apiKeys: ApiKey[]
   enableApiKey: boolean
   oauthProxyMode: 'system' | 'none'
   sessionConfig: SessionConfig
-  toolPromptConfig: ToolPromptConfig
+  toolCallingConfig: ToolCallingConfig
+  toolPromptConfig?: LegacyToolPromptConfig
+  managementApi: ManagementApiConfig
+  contextManagement?: unknown
+  language: 'zh-CN' | 'en-US'
 }
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
@@ -127,6 +137,7 @@ export interface LogEntry {
 export interface ProxyStatus {
   isRunning: boolean
   port: number
+  host: string
   uptime: number
   connections: number
 }
@@ -192,18 +203,19 @@ export interface SystemPrompt {
   updatedAt: number
 }
 
-export interface ToolPromptConfig {
-  mode: 'auto' | 'always' | 'never'
-  defaultFormat: 'bracket' | 'xml'
-  customPromptTemplate?: string
-  enableToolCallParsing: boolean
-}
-
 export interface SessionConfig {
   sessionTimeout: number
   maxMessagesPerSession: number
   deleteAfterTimeout: boolean
   maxSessionsPerAccount: number
+}
+
+export interface RequestLogConfig {
+  enabled: boolean
+  maxEntries: number
+  includeBodies: boolean
+  maxBodyChars: number
+  redactSensitiveData: boolean
 }
 
 export interface ManagementApiConfig {
@@ -353,12 +365,14 @@ export interface ConfigUpdateRequest {
   minimizeToTray?: boolean
   logLevel?: 'debug' | 'info' | 'warn' | 'error'
   logRetentionDays?: number
+  requestLogConfig?: Partial<RequestLogConfig>
   requestTimeout?: number
   retryCount?: number
   enableApiKey?: boolean
   oauthProxyMode?: 'system' | 'none'
   sessionConfig?: SessionConfig
-  toolPromptConfig?: ToolPromptConfig
+  toolCallingConfig?: Partial<ToolCallingConfig>
+  toolPromptConfig?: LegacyToolPromptConfig
   managementApi?: ManagementApiConfig
 }
 

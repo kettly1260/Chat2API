@@ -41,7 +41,7 @@ export const kimiConfig: BuiltinProviderConfig = {
       type: 'password',
       required: true,
       placeholder: '请输入 Kimi 访问令牌或刷新令牌',
-      helpText: '支持 JWT Token（以 eyJ 开头）或 refresh_token',
+      helpText: '浏览器 Cookie 中的 kimi-auth 字段值（推荐），或 JWT Token / refresh_token',
     },
   ],
   tokenCheckEndpoint: '/api/auth/token/refresh',

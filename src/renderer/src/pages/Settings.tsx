@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -7,10 +8,24 @@ import {
   SecuritySettings,
   ManagementApiSettings,
 } from '@/components/settings'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { Sun, Settings as SettingsIcon, Database, Shield, Key } from 'lucide-react'
 
 export function Settings() {
   const { t } = useTranslation()
+  const { fetchConfig, setConfig } = useSettingsStore()
+
+  useEffect(() => {
+    void fetchConfig()
+
+    const unsubscribe = window.electronAPI?.config?.onConfigChanged?.((config) => {
+      setConfig(config)
+    })
+
+    return () => {
+      unsubscribe?.()
+    }
+  }, [fetchConfig, setConfig])
 
   return (
     <div className="space-y-6">

@@ -16,6 +16,15 @@ import { TrayManager } from '../tray/TrayManager'
 import { ConfigManager } from '../store/config'
 import { generateManagementSecret } from '../proxy/middleware/managementAuth'
 import { UpdaterManager } from '../updater'
+import { DeepSeekAdapter } from '../proxy/adapters/deepseek'
+import { GLMAdapter } from '../proxy/adapters/glm'
+import { KimiAdapter } from '../proxy/adapters/kimi'
+import { MimoAdapter } from '../proxy/adapters/mimo'
+import { MiniMaxAdapter } from '../proxy/adapters/minimax'
+import { PerplexityAdapter } from '../proxy/adapters/perplexity'
+import { QwenAdapter } from '../proxy/adapters/qwen'
+import { QwenAiAdapter } from '../proxy/adapters/qwen-ai'
+import { ZaiAdapter } from '../proxy/adapters/zai'
 import type { Provider, Account, ProxyStatus, ProviderCheckResult, OAuthResult, AuthType, CredentialField, LogLevel, LogEntry, ProviderVendor, AppConfig } from '../../shared/types'
 import type { SystemPrompt, SessionConfig, SessionRecord, ManagementApiConfig } from '../store/types'
 import type { ProviderType } from '../oauth/types'
@@ -83,6 +92,18 @@ function applyHeadlessEnvOverrides(): void {
   }
 }
 
+const clearChatsHandlers: Record<string, (provider: Provider, account: Account) => Promise<boolean>> = {
+  kimi: async (provider, account) => new KimiAdapter(provider, account).deleteAllChats(),
+  qwen: async (provider, account) => new QwenAdapter(provider, account).deleteAllChats(),
+  'qwen-ai': async (provider, account) => new QwenAiAdapter(provider, account).deleteAllChats(),
+  minimax: async (provider, account) => new MiniMaxAdapter(provider, account).deleteAllChats(),
+  zai: async (provider, account) => new ZaiAdapter(provider, account).deleteAllChats(),
+  perplexity: async (provider, account) => new PerplexityAdapter(provider, account).deleteAllChats(),
+  deepseek: async (provider, account) => new DeepSeekAdapter(provider, account).deleteAllChats(),
+  glm: async (provider, account) => new GLMAdapter(provider, account).deleteAllChats(),
+  mimo: async (provider, account) => new MimoAdapter(provider, account).deleteAllChats(),
+}
+
 export async function registerIpcHandlers(mainWindow: BrowserWindow | null): Promise<void> {
   try {
     await storeManager.initialize()
@@ -130,6 +151,7 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow | null): Pro
         const status: ProxyStatus = {
           isRunning: true,
           port: proxyPort,
+          host: proxyHost,
           uptime: 0,
           connections: 0,
         }
@@ -163,6 +185,7 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow | null): Pro
         const status: ProxyStatus = {
           isRunning: true,
           port: proxyPort,
+          host: proxyHost,
           uptime: 0,
           connections: 0,
         }
@@ -192,6 +215,7 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow | null): Pro
         const status: ProxyStatus = {
           isRunning: false,
           port: proxyStatusManager.getPort(),
+          host: storeManager.getConfig().proxyHost || proxyStatusManager.getHost(),
           uptime: proxyStartTime ? Date.now() - proxyStartTime : 0,
           connections: 0,
         }
@@ -211,9 +235,13 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow | null): Pro
   ipcMain.handle(IpcChannels.PROXY_GET_STATUS, async (): Promise<ProxyStatus> => {
     const isRunning = proxyServer !== null
     const port = proxyStatusManager.getPort()
+    const host = isRunning
+      ? proxyStatusManager.getHost()
+      : storeManager.getConfig().proxyHost || proxyStatusManager.getHost()
     return {
       isRunning,
       port,
+      host,
       uptime: proxyStartTime && isRunning ? Date.now() - proxyStartTime : 0,
       connections: proxyStatusManager.getStatistics().activeConnections,
     }
@@ -255,16 +283,34 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow | null): Pro
   })
 
   ipcMain.handle(IpcChannels.STORE_GET, async (_, key: string): Promise<unknown> => {
+    if (key === 'logs') {
+      return storeManager.getLogs()
+    }
     const store = storeManager.getStore()
     return store?.get(key)
   })
 
   ipcMain.handle(IpcChannels.STORE_SET, async (_, key: string, value: unknown): Promise<void> => {
+    if (key === 'logs') {
+      storeManager.replaceLogs(Array.isArray(value) ? value as LogEntry[] : [])
+      return
+    }
     const store = storeManager.getStore()
     store?.set(key as 'providers' | 'accounts' | 'config' | 'logs', value as never)
+    if (key === 'config') {
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) {
+          win.webContents.send(IpcChannels.CONFIG_CHANGED, value)
+        }
+      })
+    }
   })
 
   ipcMain.handle(IpcChannels.STORE_DELETE, async (_, key: string): Promise<void> => {
+    if (key === 'logs') {
+      storeManager.clearLogs()
+      return
+    }
     const store = storeManager.getStore()
     store?.delete(key as 'providers' | 'accounts' | 'config' | 'logs')
   })
@@ -597,7 +643,6 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow | null): Pro
     }
 
     try {
-      const { MiniMaxAdapter } = await import('../proxy/adapters/minimax')
       const adapter = new MiniMaxAdapter(provider, account)
       return await adapter.getCredits()
     } catch (error) {
@@ -618,45 +663,13 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow | null): Pro
         return { success: false, error: 'Provider not found' }
       }
 
-      // Support qwen-ai, minimax, zai, perplexity, deepseek, glm, and mimo providers
-      if (provider.id === 'qwen-ai') {
-        const { QwenAiAdapter } = await import('../proxy/adapters/qwen-ai')
-        const adapter = new QwenAiAdapter(provider, account)
-        const success = await adapter.deleteAllChats()
-        return { success }
-      } else if (provider.id === 'minimax') {
-        const { MiniMaxAdapter } = await import('../proxy/adapters/minimax')
-        const adapter = new MiniMaxAdapter(provider, account)
-        const success = await adapter.deleteAllChats()
-        return { success }
-      } else if (provider.id === 'zai') {
-        const { ZaiAdapter } = await import('../proxy/adapters/zai')
-        const adapter = new ZaiAdapter(provider, account)
-        const success = await adapter.deleteAllChats()
-        return { success }
-      } else if (provider.id === 'perplexity') {
-        const { PerplexityAdapter } = await import('../proxy/adapters/perplexity')
-        const adapter = new PerplexityAdapter(provider, account)
-        const success = await adapter.deleteAllChats()
-        return { success }
-      } else if (provider.id === 'deepseek') {
-        const { DeepSeekAdapter } = await import('../proxy/adapters/deepseek')
-        const adapter = new DeepSeekAdapter(provider, account)
-        const success = await adapter.deleteAllChats()
-        return { success }
-      } else if (provider.id === 'glm') {
-        const { GLMAdapter } = await import('../proxy/adapters/glm')
-        const adapter = new GLMAdapter(provider, account)
-        const success = await adapter.deleteAllChats()
-        return { success }
-      } else if (provider.id === 'mimo') {
-        const { MimoAdapter } = await import('../proxy/adapters/mimo')
-        const adapter = new MimoAdapter(provider, account)
-        const success = await adapter.deleteAllChats()
-        return { success }
-      } else {
+      const clearChats = clearChatsHandlers[provider.id]
+      if (!clearChats) {
         return { success: false, error: 'This feature is not available for this provider' }
       }
+
+      const success = await clearChats(provider, account)
+      return { success }
     } catch (error) {
       console.error('[IPC] Failed to clear chats:', error)
       return { 
@@ -719,8 +732,7 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow | null): Pro
     limit?: number
     offset?: number
   }): Promise<LogEntry[]> => {
-    const level = filter?.level === 'all' ? undefined : filter?.level
-    return storeManager.getLogs(filter?.limit, level)
+    return storeManager.getLogs(filter)
   })
 
   ipcMain.handle(IpcChannels.LOGS_GET_STATS, async () => {
@@ -789,46 +801,13 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow | null): Pro
 
   ipcMain.handle(IpcChannels.APP_CHECK_UPDATE, async () => {
     try {
-      const response = await axios.get('https://api.github.com/repos/xiaoY233/Chat2API/releases/latest', {
-        headers: {
-          'Accept': 'application/vnd.github.v3+json',
-          'User-Agent': 'Chat2API-Manager',
-        },
-        timeout: 10000,
-      })
-      const data = response.data
-      const latestVersion = data.tag_name?.replace(/^v/, '') || ''
-      const releaseUrl = data.html_url || 'https://github.com/xiaoY233/Chat2API/releases'
-      const currentVersion = app.getVersion()
-
-      // Simple semver comparison
-      const compareVersions = (v1: string, v2: string): number => {
-        const parts1 = v1.split('.').map(Number)
-        const parts2 = v2.split('.').map(Number)
-        const maxLength = Math.max(parts1.length, parts2.length)
-        for (let i = 0; i < maxLength; i++) {
-          const p1 = parts1[i] || 0
-          const p2 = parts2[i] || 0
-          if (p1 > p2) return 1
-          if (p1 < p2) return -1
-        }
-        return 0
-      }
-
-      const hasUpdate = latestVersion && compareVersions(latestVersion, currentVersion) > 0
-
-      return {
-        hasUpdate,
-        currentVersion,
-        latestVersion,
-        releaseUrl,
-      }
+      await updaterManager.checkForUpdates()
+      return updaterManager.getStatus()
     } catch (error) {
       console.error('[App] Check update error:', error)
       return {
-        hasUpdate: false,
-        currentVersion: app.getVersion(),
-        latestVersion: app.getVersion(),
+        ...updaterManager.getStatus(),
+        checking: false,
         error: error instanceof Error ? error.message : String(error),
       }
     }
@@ -1040,9 +1019,13 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow | null): Pro
 export function getProxyStatus(): ProxyStatus {
   const isRunning = proxyServer !== null
   const port = proxyStatusManager.getPort()
+  const host = isRunning
+    ? proxyStatusManager.getHost()
+    : storeManager.getConfig().proxyHost || proxyStatusManager.getHost()
   return {
     isRunning,
     port,
+    host,
     uptime: proxyStartTime && isRunning ? Date.now() - proxyStartTime : 0,
     connections: proxyStatusManager.getStatistics().activeConnections,
   }
