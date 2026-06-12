@@ -30,23 +30,11 @@ export const mimoConfig: BuiltinProviderConfig = {
     'MiMo-V2.5-Pro',
     'MiMo-V2.5',
     'MiMo-V2-Flash',
-    'mimo-v2.5-pro',
-    'mimo-v2.5-flash',
-    'mimo-v2.5-omni',
-    'mimo-v2-pro',
-    'mimo-v2-flash-studio',
-    'mimo-v2-omni',
   ],
   modelMappings: {
     'MiMo-V2.5-Pro': 'mimo-v2.5-pro',
     'MiMo-V2.5': 'mimo-v2.5',
     'MiMo-V2-Flash': 'mimo-v2-flash',
-    'mimo-v2.5-pro': 'mimo-v2.5-pro',
-    'mimo-v2.5-flash': 'mimo-v2.5-flash',
-    'mimo-v2.5-omni': 'mimo-v2.5-omni',
-    'mimo-v2-pro': 'mimo-v2-pro',
-    'mimo-v2-flash-studio': 'mimo-v2-flash-studio',
-    'mimo-v2-omni': 'mimo-v2-omni',
   },
   credentialFields: [
     {

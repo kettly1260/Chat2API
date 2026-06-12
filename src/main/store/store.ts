@@ -478,16 +478,6 @@ class StoreManager {
       if (p.type === 'builtin') {
         const builtinConfig = BUILTIN_PROVIDERS.find(bp => bp.id === p.id)
         if (builtinConfig) {
-          const persistedSupportedModels = Array.isArray(p.supportedModels) ? p.supportedModels : []
-          const mergedSupportedModels = Array.from(new Set([
-            ...(builtinConfig.supportedModels || []),
-            ...persistedSupportedModels,
-          ]))
-          const mergedModelMappings = {
-            ...(builtinConfig.modelMappings || {}),
-            ...(p.modelMappings || {}),
-          }
-
           if (p.id === 'deepseek') {
             const sanitizedOverrides = sanitizeDeepSeekModelOverrides(userModelOverrides[p.id])
             if (JSON.stringify(sanitizedOverrides) !== JSON.stringify(userModelOverrides[p.id])) {
@@ -500,8 +490,8 @@ class StoreManager {
             ...p, 
             apiEndpoint: builtinConfig.apiEndpoint,
             chatPath: builtinConfig.chatPath,
-            supportedModels: mergedSupportedModels,
-            modelMappings: mergedModelMappings,
+            supportedModels: builtinConfig.supportedModels,
+            modelMappings: builtinConfig.modelMappings,
             headers: builtinConfig.headers,
             credentialFields: builtinConfig.credentialFields,
             description: builtinConfig.description,
