@@ -4,6 +4,7 @@ import type { Account, Provider } from '../../shared/types'
 import AccountManager from '../store/accounts'
 import ProviderManager from '../store/providers'
 import { getBuiltinProvider } from './builtin'
+import { applyActiveNetworkConfig, getActiveModelsApiConfig } from './networkConfig'
 
 const MODEL_SYNC_TIMEOUT_MS = 15000
 const DEFAULT_MIN_INTERVAL_MS = 5 * 60 * 1000
@@ -517,19 +518,23 @@ function buildProviderSpecificSources(
 }
 
 async function buildModelSourceRequests(provider: Provider, account: Account): Promise<ModelSourceRequest[]> {
+  provider = applyActiveNetworkConfig(provider)
   const builtin = getBuiltinProvider(provider.id)
+  const activeModelsApi = getActiveModelsApiConfig(provider)
   const baseHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
     Accept: 'application/json',
     ...(provider.headers || {}),
     ...(builtin?.modelsApiHeaders || {}),
+    ...(activeModelsApi?.modelsApiHeaders || {}),
   }
 
-  if (builtin?.modelsApiEndpoint) {
+  const modelsApiEndpoint = activeModelsApi?.modelsApiEndpoint || builtin?.modelsApiEndpoint
+  if (modelsApiEndpoint) {
     const builtinHeaders = applyCredentialHeaders(baseHeaders, account)
     const requests: ModelSourceRequest[] = [
       {
-        url: builtin.modelsApiEndpoint,
+        url: modelsApiEndpoint,
         method: 'GET',
         headers: builtinHeaders,
       },

@@ -61,6 +61,7 @@ export class ProviderManager {
     name: string
     authType: AuthType
     apiEndpoint: string
+    chatPath?: string
     headers?: Record<string, string>
     description?: string
     icon?: string
@@ -144,7 +145,7 @@ export class ProviderManager {
     }
     
     if (existing.type === 'builtin') {
-      const restricted = ['name', 'authType', 'apiEndpoint']
+      const restricted = ['name', 'authType', 'apiEndpoint', 'chatPath', 'headers']
       const hasRestricted = restricted.some((key) => key in updates)
       
       if (hasRestricted) {

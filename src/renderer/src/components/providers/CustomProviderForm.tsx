@@ -45,6 +45,7 @@ export interface CustomProviderFormData {
   name: string
   authType: AuthType
   apiEndpoint: string
+  chatPath?: string
   headers: Record<string, string>
   description: string
   supportedModels: string[]
@@ -88,6 +89,7 @@ export function CustomProviderForm({
     name: initialData?.name || '',
     authType: initialData?.authType || 'token',
     apiEndpoint: initialData?.apiEndpoint || '',
+    chatPath: initialData?.chatPath || '/chat/completions',
     headers: initialData?.headers || { 'Content-Type': 'application/json' },
     description: initialData?.description || '',
     supportedModels: initialData?.supportedModels || [],
@@ -160,6 +162,10 @@ export function CustomProviderForm({
       }
     }
 
+    if (formData.chatPath?.trim() && !formData.chatPath.trim().startsWith('/')) {
+      newErrors.chatPath = 'Path must start with /'
+    }
+
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -198,6 +204,19 @@ export function CustomProviderForm({
                 />
                 {errors.name && (
                   <p className="text-xs text-destructive">{errors.name}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="chatPath">Chat path</Label>
+                <Input
+                  id="chatPath"
+                  value={formData.chatPath || ''}
+                  onChange={(e) => setFormData({ ...formData, chatPath: e.target.value })}
+                  placeholder="/chat/completions"
+                />
+                {errors.chatPath && (
+                  <p className="text-xs text-destructive">{errors.chatPath}</p>
                 )}
               </div>
 

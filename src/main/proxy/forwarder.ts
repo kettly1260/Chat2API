@@ -29,6 +29,7 @@ import {
   SummaryGenerator,
   type ChatMessage as ContextChatMessage,
 } from './services/contextManagementService'
+import { applyActiveNetworkConfig } from '../providers/networkConfig'
 
 function shouldDeleteSession(): boolean {
   return sessionManager.shouldDeleteAfterChat()
@@ -336,16 +337,17 @@ export class RequestForwarder {
     context: ProxyContext
   ): Promise<ForwardResult> {
     const startTime = Date.now()
+    const effectiveProvider = applyActiveNetworkConfig(provider)
 
-    const dedicatedForwarder = this.providerForwarders.find(forwarder => forwarder.matches(provider))
+    const dedicatedForwarder = this.providerForwarders.find(forwarder => forwarder.matches(effectiveProvider))
     if (dedicatedForwarder) {
-      return dedicatedForwarder.forward(request, account, provider, actualModel, startTime)
+      return dedicatedForwarder.forward(request, account, effectiveProvider, actualModel, startTime)
     }
 
     try {
-      const chatPath = provider.chatPath || '/chat/completions'
-      const url = this.buildUrl(provider, chatPath)
-      const headers = this.buildHeaders(provider, account)
+      const chatPath = effectiveProvider.chatPath || '/chat/completions'
+      const url = this.buildUrl(effectiveProvider, chatPath)
+      const headers = this.buildHeaders(effectiveProvider, account)
       const body = this.buildRequestBody(request, actualModel, account)
 
       const axiosConfig: AxiosRequestConfig = {

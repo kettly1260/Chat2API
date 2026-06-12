@@ -68,6 +68,7 @@ const providersAPI = {
     name: string
     authType: AuthType
     apiEndpoint: string
+    chatPath?: string
     headers?: Record<string, string>
     description?: string
     supportedModels?: string[]
@@ -77,6 +78,9 @@ const providersAPI = {
   
   update: (id: string, updates: Partial<Provider>): Promise<Provider | null> => 
     ipcRenderer.invoke(IpcChannels.PROVIDERS_UPDATE, id, updates),
+  
+  testCustomNetwork: (providerId: string, config: NonNullable<Provider['customNetwork']>['pending']): Promise<NonNullable<Provider['customNetwork']>['lastTest']> =>
+    ipcRenderer.invoke(IpcChannels.PROVIDERS_TEST_CUSTOM_NETWORK, providerId, config),
   
   delete: (id: string): Promise<boolean> => 
     ipcRenderer.invoke(IpcChannels.PROVIDERS_DELETE, id),

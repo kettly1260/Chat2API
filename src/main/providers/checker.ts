@@ -2,6 +2,8 @@ import axios, { AxiosError } from 'axios'
 import { getBuiltinProvider } from './builtin'
 import type { Provider, ProviderCheckResult, Account } from '../../shared/types'
 import type { BuiltinProviderConfig } from '../store/types'
+import { applyActiveNetworkConfig } from './networkConfig'
+import { ProviderManager } from '../store/providers'
 
 const CHECK_TIMEOUT = 15000
 
@@ -19,17 +21,18 @@ export interface TokenCheckResult {
 export class ProviderChecker {
   static async checkProviderStatus(provider: Provider): Promise<ProviderCheckResult> {
     const startTime = Date.now()
+    const effectiveProvider = applyActiveNetworkConfig(provider)
     
     try {
-      const builtinConfig = provider.type === 'builtin' 
-        ? getBuiltinProvider(provider.id) 
+      const builtinConfig = effectiveProvider.type === 'builtin' 
+        ? getBuiltinProvider(effectiveProvider.id) 
         : null
-      
+       
       if (builtinConfig) {
-        return await this.checkBuiltinProvider(builtinConfig)
+        return await this.checkCustomProvider(effectiveProvider)
       }
-      
-      return await this.checkCustomProvider(provider)
+       
+      return await this.checkCustomProvider(effectiveProvider)
     } catch (error) {
       return {
         providerId: provider.id,
@@ -745,21 +748,26 @@ export class ProviderChecker {
     modelMappings: Record<string, string>
   }> {
     const builtinConfig = getBuiltinProvider(providerId)
+    const provider = ProviderManager.getById(providerId)
+    const activeModelsApiEndpoint = provider?.customNetwork?.active?.modelsApiEndpoint
+    const activeModelsApiHeaders = provider?.customNetwork?.active?.modelsApiHeaders
     
     if (!builtinConfig) {
       throw new Error(`Provider ${providerId} not found`)
     }
 
-    if (!builtinConfig.modelsApiEndpoint) {
+    const modelsApiEndpoint = activeModelsApiEndpoint || builtinConfig.modelsApiEndpoint
+    if (!modelsApiEndpoint) {
       throw new Error(`Provider ${providerId} does not support dynamic model fetching`)
     }
 
     try {
       const headers: Record<string, string> = {
         ...(builtinConfig.modelsApiHeaders || builtinConfig.headers),
+        ...(activeModelsApiHeaders || {}),
       }
 
-      const response = await axios.get(builtinConfig.modelsApiEndpoint, {
+      const response = await axios.get(modelsApiEndpoint, {
         headers,
         timeout: CHECK_TIMEOUT,
         validateStatus: () => true,

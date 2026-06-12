@@ -69,6 +69,30 @@ export interface Provider {
   status?: ProviderStatus
   lastStatusCheck?: number
   modelSyncStatus?: ModelSyncStatus
+  customNetwork?: ProviderCustomNetworkState
+}
+
+export interface ProviderCustomNetworkConfig {
+  apiEndpoint?: string
+  chatPath?: string
+  headers?: Record<string, string>
+  modelsApiEndpoint?: string
+  modelsApiHeaders?: Record<string, string>
+}
+
+export interface ProviderCustomNetworkTestResult {
+  success: boolean
+  testedAt: number
+  statusCode?: number
+  latency?: number
+  error?: string
+  modelsCount?: number
+}
+
+export interface ProviderCustomNetworkState {
+  pending?: ProviderCustomNetworkConfig
+  active?: ProviderCustomNetworkConfig
+  lastTest?: ProviderCustomNetworkTestResult
 }
 
 export interface ModelSyncStatus {

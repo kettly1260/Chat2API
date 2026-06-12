@@ -8,6 +8,7 @@ import { ProviderChecker } from '../providers/checker'
 import { CustomProviderManager } from '../providers/custom'
 import { getBuiltinProviders, getBuiltinProvider } from '../providers/builtin'
 import { syncProviderModels } from '../providers/modelSync'
+import { testProviderCustomNetwork } from '../providers/networkTester'
 import { oauthManager } from '../oauth/manager'
 import { ProxyServer } from '../proxy/server'
 import { proxyStatusManager } from '../proxy/status'
@@ -25,7 +26,7 @@ import { PerplexityAdapter } from '../proxy/adapters/perplexity'
 import { QwenAdapter } from '../proxy/adapters/qwen'
 import { QwenAiAdapter } from '../proxy/adapters/qwen-ai'
 import { ZaiAdapter } from '../proxy/adapters/zai'
-import type { Provider, Account, ProxyStatus, ProviderCheckResult, OAuthResult, AuthType, CredentialField, LogLevel, LogEntry, ProviderVendor, AppConfig } from '../../shared/types'
+import type { Provider, Account, ProxyStatus, ProviderCheckResult, OAuthResult, AuthType, CredentialField, LogLevel, LogEntry, ProviderVendor, AppConfig, ProviderCustomNetworkConfig } from '../../shared/types'
 import type { SystemPrompt, SessionConfig, SessionRecord, ManagementApiConfig } from '../store/types'
 import type { ProviderType } from '../oauth/types'
 
@@ -333,6 +334,7 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow | null): Pro
     type?: 'builtin' | 'custom'
     authType: AuthType
     apiEndpoint: string
+    chatPath?: string
     headers?: Record<string, string>
     description?: string
     supportedModels?: string[]
@@ -343,6 +345,10 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow | null): Pro
 
   ipcMain.handle(IpcChannels.PROVIDERS_UPDATE, async (_, id: string, updates: Partial<Provider>): Promise<Provider | null> => {
     return ProviderManager.update(id, updates)
+  })
+
+  ipcMain.handle(IpcChannels.PROVIDERS_TEST_CUSTOM_NETWORK, async (_, providerId: string, config: ProviderCustomNetworkConfig) => {
+    return testProviderCustomNetwork(providerId, config)
   })
 
   ipcMain.handle(IpcChannels.PROVIDERS_DELETE, async (_, id: string): Promise<boolean> => {

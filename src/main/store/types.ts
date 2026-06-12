@@ -154,6 +154,39 @@ export interface Provider {
   status?: ProviderStatus
   /** Last status check time */
   lastStatusCheck?: number
+  /** User supplied network/model endpoints, only active after connection test succeeds */
+  customNetwork?: ProviderCustomNetworkState
+}
+
+export interface ProviderCustomNetworkConfig {
+  /** Override provider API base endpoint */
+  apiEndpoint?: string
+  /** Override chat completion path */
+  chatPath?: string
+  /** Additional/override request headers */
+  headers?: Record<string, string>
+  /** Override dynamic model list endpoint */
+  modelsApiEndpoint?: string
+  /** Additional/override model list headers */
+  modelsApiHeaders?: Record<string, string>
+}
+
+export interface ProviderCustomNetworkTestResult {
+  success: boolean
+  testedAt: number
+  statusCode?: number
+  latency?: number
+  error?: string
+  modelsCount?: number
+}
+
+export interface ProviderCustomNetworkState {
+  /** Saved candidate config that has not passed the latest connection test */
+  pending?: ProviderCustomNetworkConfig
+  /** Config used by proxy/model sync, promoted only after a successful test */
+  active?: ProviderCustomNetworkConfig
+  /** Latest connection test result */
+  lastTest?: ProviderCustomNetworkTestResult
 }
 
 /**

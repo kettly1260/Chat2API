@@ -15,6 +15,7 @@ import {
   AddAccountDialog,
   AccountDetail,
   ProviderFilter,
+  ProviderNetworkConfigDialog,
 } from '@/components/providers'
 import { ModelEditor } from '@/components/models/ModelEditor'
 import type { 
@@ -23,6 +24,8 @@ import type {
   BuiltinProviderConfig,
   CustomProviderFormData,
   Account,
+  ProviderCustomNetworkConfig,
+  ProviderCustomNetworkTestResult,
 } from '@/types/electron'
 import { FilterType, StatusFilter } from '@/components/providers/ProviderFilter'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -51,6 +54,7 @@ export function Providers() {
   
   const [showModelEditor, setShowModelEditor] = useState(false)
   const [modelEditorProvider, setModelEditorProvider] = useState<{ id: string; name: string } | null>(null)
+  const [networkConfigProvider, setNetworkConfigProvider] = useState<Provider | null>(null)
   
   useEffect(() => {
     if (hasLoadedRef.current) return
@@ -337,6 +341,7 @@ export function Providers() {
           name: data.name,
           authType: data.authType,
           apiEndpoint: data.apiEndpoint,
+          chatPath: data.chatPath,
           headers: data.headers,
           description: data.description,
           supportedModels: data.supportedModels,
@@ -353,6 +358,7 @@ export function Providers() {
           name: data.name,
           authType: data.authType,
           apiEndpoint: data.apiEndpoint,
+          chatPath: data.chatPath,
           headers: data.headers,
           description: data.description,
           supportedModels: data.supportedModels,
@@ -373,6 +379,33 @@ export function Providers() {
         variant: 'destructive',
       })
     }
+  }
+
+  const handleConfigureNetwork = (id: string) => {
+    const provider = store.providers.find(p => p.id === id)
+    if (provider) {
+      setNetworkConfigProvider(provider)
+    }
+  }
+
+  const handleTestCustomNetwork = async (
+    providerId: string,
+    config: ProviderCustomNetworkConfig
+  ): Promise<ProviderCustomNetworkTestResult> => {
+    const result = await window.electronAPI.providers.testCustomNetwork(providerId, config)
+    const refreshedProvider = (await window.electronAPI.providers.getAll()).find(provider => provider.id === providerId)
+    if (refreshedProvider) {
+      store.updateProvider(providerId, refreshedProvider)
+      setNetworkConfigProvider(refreshedProvider)
+    }
+
+    toast({
+      title: result.success ? 'Network configuration activated' : 'Network configuration not activated',
+      description: result.success ? 'The tested configuration is now used for this provider.' : result.error || 'Connection test failed',
+      variant: result.success ? 'default' : 'destructive',
+    })
+
+    return result
   }
 
   const handleAddAccount = async (data: {
@@ -714,6 +747,7 @@ export function Providers() {
                 onManageAccounts={handleManageAccounts}
                 onUpdateModels={handleUpdateModels}
                 onManageModels={handleManageModels}
+                onConfigureNetwork={handleConfigureNetwork}
               />
             ))}
           </div>
@@ -740,10 +774,20 @@ export function Providers() {
           name: editingProvider.name,
           authType: editingProvider.authType,
           apiEndpoint: editingProvider.apiEndpoint,
+          chatPath: editingProvider.chatPath,
           headers: editingProvider.headers,
           description: editingProvider.description || '',
           supportedModels: editingProvider.supportedModels || [],
         } : undefined}
+      />
+
+      <ProviderNetworkConfigDialog
+        open={!!networkConfigProvider}
+        provider={networkConfigProvider}
+        onOpenChange={(open) => {
+          if (!open) setNetworkConfigProvider(null)
+        }}
+        onTestAndActivate={handleTestCustomNetwork}
       />
 
       {modelEditorProvider && (

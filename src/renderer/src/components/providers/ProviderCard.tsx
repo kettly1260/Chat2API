@@ -59,6 +59,7 @@ interface ProviderCardProps {
   onManageAccounts: (id: string) => void
   onUpdateModels?: (id: string) => void
   onManageModels?: (id: string) => void
+  onConfigureNetwork?: (id: string) => void
   className?: string
 }
 
@@ -81,6 +82,7 @@ export function ProviderCard({
   onManageAccounts,
   onUpdateModels,
   onManageModels,
+  onConfigureNetwork,
   className,
 }: ProviderCardProps) {
   const { t } = useTranslation()
@@ -166,6 +168,10 @@ export function ProviderCard({
               <DropdownMenuItem onClick={() => onCheckStatus(provider.id)}>
                 <RefreshCw className="mr-2 h-4 w-4" />
                 {t('providers.checkStatus')}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onConfigureNetwork?.(provider.id)}>
+                <Settings className="mr-2 h-4 w-4" />
+                Network configuration
               </DropdownMenuItem>
               {isBuiltin && (
                 <DropdownMenuItem onClick={() => onManageModels?.(provider.id)}>

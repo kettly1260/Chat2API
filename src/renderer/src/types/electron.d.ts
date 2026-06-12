@@ -22,6 +22,8 @@ import type {
   ToolCallingConfig,
   LegacyToolPromptConfig,
   EffectiveModel,
+  ProviderCustomNetworkConfig,
+  ProviderCustomNetworkTestResult,
 } from '../../../shared/types'
 
 export type { 
@@ -48,12 +50,15 @@ export type {
   ToolCallingConfig,
   LegacyToolPromptConfig,
   EffectiveModel,
+  ProviderCustomNetworkConfig,
+  ProviderCustomNetworkTestResult,
 }
 
 export interface CustomProviderFormData {
   name: string
   authType: AuthType
   apiEndpoint: string
+  chatPath?: string
   headers: Record<string, string>
   description: string
   supportedModels: string[]
@@ -89,12 +94,14 @@ interface ProvidersAPI {
     type?: 'builtin' | 'custom'
     authType: AuthType
     apiEndpoint: string
+    chatPath?: string
     headers?: Record<string, string>
     description?: string
     supportedModels?: string[]
     credentialFields?: CredentialField[]
   }) => Promise<Provider>
   update: (id: string, updates: Partial<Provider>) => Promise<Provider | null>
+  testCustomNetwork: (providerId: string, config: ProviderCustomNetworkConfig) => Promise<ProviderCustomNetworkTestResult>
   delete: (id: string) => Promise<boolean>
   checkStatus: (providerId: string) => Promise<ProviderCheckResult>
   checkAllStatus: () => Promise<Record<string, ProviderCheckResult>>

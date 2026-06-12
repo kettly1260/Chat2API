@@ -8,6 +8,7 @@ export interface CustomProviderData {
   type?: 'builtin' | 'custom'
   authType: AuthType
   apiEndpoint: string
+  chatPath?: string
   headers?: Record<string, string>
   description?: string
   icon?: string
@@ -58,6 +59,20 @@ export class CustomProviderManager {
       errors.push('API endpoint must start with http:// or https://')
     }
     
+    return { valid: errors.length === 0, errors }
+  }
+
+  private static validatePath(path: string): CustomProviderValidation {
+    const errors: string[] = []
+
+    if (!path.startsWith('/')) {
+      errors.push('API path must start with /')
+    }
+
+    if (path.includes('\n') || path.includes('\r')) {
+      errors.push('API path contains invalid characters')
+    }
+
     return { valid: errors.length === 0, errors }
   }
 
@@ -136,6 +151,11 @@ export class CustomProviderManager {
     
     const endpointValidation = this.validateApiEndpoint(data.apiEndpoint)
     errors.push(...endpointValidation.errors)
+
+    if (data.chatPath) {
+      const pathValidation = this.validatePath(data.chatPath)
+      errors.push(...pathValidation.errors)
+    }
     
     const authTypeValidation = this.validateAuthType(data.authType)
     errors.push(...authTypeValidation.errors)
@@ -175,6 +195,7 @@ export class CustomProviderManager {
       type: data.type || 'custom',
       authType: data.authType,
       apiEndpoint: data.apiEndpoint.trim(),
+      chatPath: data.chatPath?.trim(),
       headers: data.headers || {},
       enabled: true,
       createdAt: now,
@@ -216,6 +237,13 @@ export class CustomProviderManager {
       const endpointValidation = this.validateApiEndpoint(updates.apiEndpoint)
       if (!endpointValidation.valid) {
         throw new Error(endpointValidation.errors.join(', '))
+      }
+    }
+
+    if (updates.chatPath) {
+      const pathValidation = this.validatePath(updates.chatPath)
+      if (!pathValidation.valid) {
+        throw new Error(pathValidation.errors.join(', '))
       }
     }
     
