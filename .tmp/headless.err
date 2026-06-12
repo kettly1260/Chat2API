@@ -1,0 +1,26 @@
+(node:63748) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///G:/LLM/Chat2API/postcss.config.js is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to G:\LLM\Chat2API\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+node_modules/http-errors/node_modules/depd/index.js (222:21): Use of eval in "node_modules/http-errors/node_modules/depd/index.js" is strongly discouraged as it poses security risks and may cause issues with minification.
+[1m[33m[plugin:vite:reporter][39m[22m [33m[plugin vite:reporter] 
+(!) G:/LLM/Chat2API/src/main/proxy/adapters/deepseek.ts is dynamically imported by G:/LLM/Chat2API/src/main/ipc/handlers.ts but also statically imported by G:/LLM/Chat2API/src/main/proxy/forwarder.ts, dynamic import will not move module into another chunk.
+[39m
+[1m[33m[plugin:vite:reporter][39m[22m [33m[plugin vite:reporter] 
+(!) G:/LLM/Chat2API/src/main/proxy/adapters/glm.ts is dynamically imported by G:/LLM/Chat2API/src/main/ipc/handlers.ts but also statically imported by G:/LLM/Chat2API/src/main/proxy/forwarder.ts, dynamic import will not move module into another chunk.
+[39m
+[1m[33m[plugin:vite:reporter][39m[22m [33m[plugin vite:reporter] 
+(!) G:/LLM/Chat2API/src/main/proxy/adapters/mimo.ts is dynamically imported by G:/LLM/Chat2API/src/main/ipc/handlers.ts but also statically imported by G:/LLM/Chat2API/src/main/proxy/forwarder.ts, dynamic import will not move module into another chunk.
+[39m
+[1m[33m[plugin:vite:reporter][39m[22m [33m[plugin vite:reporter] 
+(!) G:/LLM/Chat2API/src/main/proxy/adapters/qwen-ai.ts is dynamically imported by G:/LLM/Chat2API/src/main/ipc/handlers.ts but also statically imported by G:/LLM/Chat2API/src/main/proxy/forwarder.ts, dynamic import will not move module into another chunk.
+[39m
+[1m[33m[plugin:vite:reporter][39m[22m [33m[plugin vite:reporter] 
+(!) G:/LLM/Chat2API/src/main/proxy/adapters/zai.ts is dynamically imported by G:/LLM/Chat2API/src/main/ipc/handlers.ts but also statically imported by G:/LLM/Chat2API/src/main/proxy/forwarder.ts, dynamic import will not move module into another chunk.
+[39m
+[1m[33m[plugin:vite:reporter][39m[22m [33m[plugin vite:reporter] 
+(!) G:/LLM/Chat2API/src/main/proxy/adapters/minimax.ts is dynamically imported by G:/LLM/Chat2API/src/main/ipc/handlers.ts, G:/LLM/Chat2API/src/main/ipc/handlers.ts but also statically imported by G:/LLM/Chat2API/src/main/proxy/forwarder.ts, dynamic import will not move module into another chunk.
+[39m
+[1m[33m[plugin:vite:reporter][39m[22m [33m[plugin vite:reporter] 
+(!) G:/LLM/Chat2API/src/main/proxy/adapters/perplexity.ts is dynamically imported by G:/LLM/Chat2API/src/main/ipc/handlers.ts but also statically imported by G:/LLM/Chat2API/src/main/proxy/forwarder.ts, dynamic import will not move module into another chunk.
+[39m

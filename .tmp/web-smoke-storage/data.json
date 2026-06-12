@@ -1,0 +1,600 @@
+{
+  "providers": [
+    {
+      "id": "deepseek",
+      "name": "DeepSeek",
+      "type": "builtin",
+      "authType": "userToken",
+      "apiEndpoint": "https://chat.deepseek.com/api",
+      "chatPath": "/v0/chat/completion",
+      "headers": {
+        "Content-Type": "application/json",
+        "Accept": "*/*",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Origin": "https://chat.deepseek.com",
+        "Referer": "https://chat.deepseek.com/",
+        "Sec-Ch-Ua": "\"Not/A)Brand\";v=\"99\", \"Chromium\";v=\"148\"",
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": "\"macOS\"",
+        "Sec-Fetch-Dest": "empty",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "same-origin",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+        "X-App-Version": "2.0.0",
+        "X-Client-Locale": "zh_CN",
+        "X-Client-Platform": "web",
+        "X-Client-Version": "2.0.0"
+      },
+      "enabled": true,
+      "description": "DeepSeek AI assistant, supports deep thinking and web search",
+      "supportedModels": [
+        "deepseek-v4-flash",
+        "deepseek-v4-pro"
+      ],
+      "modelMappings": {
+        "deepseek-v4-flash": "deepseek-v4-flash",
+        "deepseek-v4-pro": "deepseek-v4-pro"
+      },
+      "credentialFields": [
+        {
+          "name": "token",
+          "label": "User Token",
+          "type": "password",
+          "required": true,
+          "placeholder": "Enter DeepSeek user token",
+          "helpText": "Authentication token obtained from DeepSeek web version, found in browser DevTools Application -> Local Storage"
+        }
+      ],
+      "tokenCheckEndpoint": "/v0/users/current",
+      "tokenCheckMethod": "GET",
+      "createdAt": 1781217537985,
+      "updatedAt": 1781217537985
+    },
+    {
+      "id": "glm",
+      "name": "GLM",
+      "type": "builtin",
+      "authType": "refresh_token",
+      "apiEndpoint": "https://chatglm.cn/api",
+      "chatPath": "/chatglm/backend-api/assistant/stream",
+      "headers": {
+        "Content-Type": "application/json",
+        "Accept": "text/event-stream",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6",
+        "App-Name": "chatglm",
+        "Cache-Control": "no-cache",
+        "Origin": "https://chatglm.cn",
+        "Pragma": "no-cache",
+        "Priority": "u=1, i",
+        "Sec-Ch-Ua": "\"Microsoft Edge\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": "\"Windows\"",
+        "Sec-Fetch-Dest": "empty",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "same-origin",
+        "X-App-Fr": "browser_extension",
+        "X-App-Platform": "pc",
+        "X-App-Version": "0.0.1",
+        "X-Device-Brand": "",
+        "X-Device-Model": "",
+        "X-Lang": "zh"
+      },
+      "enabled": true,
+      "description": "Zhipu Qingyan AI assistant, supports GLM-5.1 flagship model, deep thinking and video generation",
+      "supportedModels": [
+        "GLM-5.1"
+      ],
+      "modelMappings": {
+        "GLM-5.1": "glm-5.1"
+      },
+      "credentialFields": [
+        {
+          "name": "refresh_token",
+          "label": "Refresh Token",
+          "type": "password",
+          "required": true,
+          "placeholder": "Enter GLM refresh token",
+          "helpText": "Get refresh_token from Zhipu Qingyan web version, found in browser DevTools Application -> Local Storage -> chatglm_refresh_token"
+        }
+      ],
+      "tokenCheckEndpoint": "/chatglm/user-api/user/refresh",
+      "tokenCheckMethod": "POST",
+      "createdAt": 1781217537985,
+      "updatedAt": 1781217537985
+    },
+    {
+      "id": "kimi",
+      "name": "Kimi",
+      "type": "builtin",
+      "authType": "jwt",
+      "apiEndpoint": "https://www.kimi.com",
+      "chatPath": "/apiv2/kimi.gateway.chat.v1.ChatService/Chat",
+      "headers": {
+        "Content-Type": "application/connect+json",
+        "Accept": "*/*",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+        "Origin": "https://www.kimi.com",
+        "Sec-Ch-Ua": "\"Google Chrome\";v=\"131\", \"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"",
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": "\"Windows\"",
+        "Sec-Fetch-Dest": "empty",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "same-origin",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Priority": "u=1, i"
+      },
+      "enabled": true,
+      "description": "Kimi K2.6 AI assistant by Moonshot, supports thinking mode and web search",
+      "supportedModels": [
+        "Kimi-K2.6",
+        "Kimi-K2.5"
+      ],
+      "modelMappings": {
+        "Kimi-K2.6": "kimi-k2.6",
+        "Kimi-K2.5": "kimi-k2.5"
+      },
+      "credentialFields": [
+        {
+          "name": "token",
+          "label": "访问令牌",
+          "type": "password",
+          "required": true,
+          "placeholder": "请输入 Kimi 访问令牌或刷新令牌",
+          "helpText": "浏览器 Cookie 中的 kimi-auth 字段值（推荐），或 JWT Token / refresh_token"
+        }
+      ],
+      "tokenCheckEndpoint": "/api/auth/token/refresh",
+      "tokenCheckMethod": "GET",
+      "createdAt": 1781217537985,
+      "updatedAt": 1781217537985
+    },
+    {
+      "id": "minimax",
+      "name": "MiniMax",
+      "type": "builtin",
+      "authType": "jwt",
+      "apiEndpoint": "https://agent.minimaxi.com",
+      "chatPath": "/matrix/api/v1/chat/send_msg",
+      "headers": {
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "Accept-Language": "zh-CN,zh;q=0.9",
+        "Cache-Control": "no-cache",
+        "Origin": "https://agent.minimaxi.com",
+        "Pragma": "no-cache",
+        "Sec-Ch-Ua": "\"Not:A-Brand\";v=\"99\", \"Google Chrome\";v=\"145\", \"Chromium\";v=\"145\"",
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": "\"macOS\"",
+        "Sec-Fetch-Dest": "empty",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "same-origin",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+      },
+      "enabled": true,
+      "description": "MiniMax Agent - AI assistant with MCP multi-agent collaboration",
+      "supportedModels": [
+        "MiniMax-M2.7"
+      ],
+      "modelMappings": {
+        "MiniMax-M2.7": "MiniMax-M2.7"
+      },
+      "credentialFields": [
+        {
+          "name": "token",
+          "label": "JWT Token",
+          "type": "password",
+          "required": true,
+          "placeholder": "Enter MiniMax JWT Token or realUserID+JWTtoken",
+          "helpText": "Format: \"realUserID+JWTtoken\" or just JWT token (will extract userID from JWT)"
+        },
+        {
+          "name": "realUserID",
+          "label": "Real User ID (Optional)",
+          "type": "text",
+          "required": false,
+          "placeholder": "Enter Real User ID (optional)",
+          "helpText": "If provided, use this instead of JWT user ID. Can also use format: realUserID+JWTtoken in token field"
+        }
+      ],
+      "tokenCheckEndpoint": "/v1/api/user/device/register",
+      "tokenCheckMethod": "POST",
+      "createdAt": 1781217537985,
+      "updatedAt": 1781217537985
+    },
+    {
+      "id": "mimo",
+      "name": "Mimo",
+      "type": "builtin",
+      "authType": "cookie",
+      "apiEndpoint": "https://aistudio.xiaomimimo.com",
+      "chatPath": "/open-apis/bot/chat",
+      "headers": {
+        "Content-Type": "application/json",
+        "Accept": "*/*",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Cache-Control": "no-cache",
+        "Origin": "https://aistudio.xiaomimimo.com",
+        "Referer": "https://aistudio.xiaomimimo.com/",
+        "Pragma": "no-cache",
+        "Sec-Ch-Ua": "\"Chromium\";v=\"144\", \"Not(A:Brand\";v=\"8\", \"Google Chrome\";v=\"144\"",
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": "\"Windows\"",
+        "Sec-Fetch-Dest": "empty",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "same-origin",
+        "X-Timezone": "Asia/Shanghai"
+      },
+      "enabled": true,
+      "description": "XiaomiMIMO - Xiaomi General Intelligence Foundation Model",
+      "supportedModels": [
+        "MiMo-V2.5-Pro",
+        "MiMo-V2.5",
+        "MiMo-V2-Flash",
+        "mimo-v2.5-pro",
+        "mimo-v2.5-flash",
+        "mimo-v2.5-omni",
+        "mimo-v2-pro",
+        "mimo-v2-flash-studio",
+        "mimo-v2-omni"
+      ],
+      "modelMappings": {
+        "MiMo-V2.5-Pro": "mimo-v2.5-pro",
+        "MiMo-V2.5": "mimo-v2.5",
+        "MiMo-V2-Flash": "mimo-v2-flash",
+        "mimo-v2.5-pro": "mimo-v2.5-pro",
+        "mimo-v2.5-flash": "mimo-v2.5-flash",
+        "mimo-v2.5-omni": "mimo-v2.5-omni",
+        "mimo-v2-pro": "mimo-v2-pro",
+        "mimo-v2-flash-studio": "mimo-v2-flash-studio",
+        "mimo-v2-omni": "mimo-v2-omni"
+      },
+      "credentialFields": [
+        {
+          "name": "service_token",
+          "label": "Service Token",
+          "type": "password",
+          "required": true,
+          "placeholder": "Enter serviceToken from Cookie",
+          "helpText": "Found in browser DevTools -> Application -> Cookies -> serviceToken"
+        },
+        {
+          "name": "user_id",
+          "label": "User ID",
+          "type": "text",
+          "required": true,
+          "placeholder": "Enter userId from Cookie",
+          "helpText": "Found in browser DevTools -> Application -> Cookies -> userId"
+        },
+        {
+          "name": "ph_token",
+          "label": "PH Token",
+          "type": "password",
+          "required": true,
+          "placeholder": "Enter xiaomichatbot_ph from Cookie",
+          "helpText": "Found in browser DevTools -> Application -> Cookies -> xiaomichatbot_ph"
+        }
+      ],
+      "createdAt": 1781217537985,
+      "updatedAt": 1781217537985
+    },
+    {
+      "id": "perplexity",
+      "name": "Perplexity",
+      "type": "builtin",
+      "authType": "cookie",
+      "apiEndpoint": "https://www.perplexity.ai",
+      "chatPath": "/rest/sse/perplexity_ask",
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+        "Accept": "text/event-stream",
+        "Content-Type": "application/json",
+        "Origin": "https://www.perplexity.ai",
+        "Referer": "https://www.perplexity.ai/"
+      },
+      "enabled": true,
+      "description": "Perplexity AI search assistant with Free Auto mode and web search enhancement",
+      "supportedModels": [
+        "Auto"
+      ],
+      "modelMappings": {
+        "Auto": "auto"
+      },
+      "credentialFields": [
+        {
+          "name": "sessionToken",
+          "label": "Session Token",
+          "type": "password",
+          "required": true,
+          "placeholder": "Enter Perplexity session token",
+          "helpText": "Session token obtained from Perplexity web version (__Secure-next-auth.session-token cookie)"
+        }
+      ],
+      "createdAt": 1781217537985,
+      "updatedAt": 1781217537985
+    },
+    {
+      "id": "qwen",
+      "name": "Qwen",
+      "type": "builtin",
+      "authType": "tongyi_sso_ticket",
+      "apiEndpoint": "https://chat2.qianwen.com",
+      "chatPath": "/api/v2/chat",
+      "headers": {
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream, text/plain, */*",
+        "Origin": "https://www.qianwen.com",
+        "Referer": "https://www.qianwen.com/"
+      },
+      "enabled": true,
+      "description": "Qwen AI assistant by Alibaba Cloud (www.qianwen.com)",
+      "supportedModels": [
+        "Qwen3.6",
+        "Qwen3.7-Max",
+        "Qwen3.5-Flash",
+        "Qwen3-Max",
+        "Qwen3-Max-Thinking-Preview",
+        "Qwen3-Coder"
+      ],
+      "modelMappings": {
+        "Qwen3.6": "Qwen",
+        "Qwen3.7-Max": "Qwen3.7-Max",
+        "Qwen3.5-Flash": "Qwen3.5-Flash",
+        "Qwen3-Max": "Qwen3-Max",
+        "Qwen3-Max-Thinking-Preview": "Qwen3-Max-Thinking-Preview",
+        "Qwen3-Coder": "Qwen3-Coder"
+      },
+      "credentialFields": [
+        {
+          "name": "ticket",
+          "label": "SSO Ticket",
+          "type": "password",
+          "required": true,
+          "placeholder": "Enter tongyi_sso_ticket",
+          "helpText": "SSO ticket obtained from www.qianwen.com, found in browser DevTools Application -> Cookies as tongyi_sso_ticket"
+        }
+      ],
+      "createdAt": 1781217537985,
+      "updatedAt": 1781217537985
+    },
+    {
+      "id": "qwen-ai",
+      "name": "Qwen AI (International)",
+      "type": "builtin",
+      "authType": "jwt",
+      "apiEndpoint": "https://chat.qwen.ai",
+      "chatPath": "/api/v2/chat/completions",
+      "headers": {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "source": "web"
+      },
+      "enabled": true,
+      "description": "Qwen AI international version (chat.qwen.ai)",
+      "modelsApiEndpoint": "https://chat.qwen.ai/api/models",
+      "modelsApiHeaders": {
+        "Accept": "application/json, text/plain, */*",
+        "Referer": "https://chat.qwen.ai/",
+        "source": "web",
+        "Version": "0.2.35"
+      },
+      "supportedModels": [
+        "Qwen3.7-Max",
+        "Qwen3.6-Plus",
+        "Qwen3.6-35B-A3B",
+        "Qwen3.6-27B",
+        "Qwen3-Coder"
+      ],
+      "modelMappings": {
+        "Qwen3.7-Max": "qwen3.7-max",
+        "Qwen3.6-Plus": "qwen3.6-plus",
+        "Qwen3.6-35B-A3B": "qwen3.6-35b-a3b",
+        "Qwen3.6-27B": "qwen3.6-27b",
+        "Qwen3-Coder": "qwen3-coder-plus"
+      },
+      "credentialFields": [
+        {
+          "name": "token",
+          "label": "Auth Token",
+          "type": "password",
+          "required": true,
+          "placeholder": "Enter JWT token from chat.qwen.ai",
+          "helpText": "JWT token obtained from chat.qwen.ai Local Storage (key: \"token\")"
+        },
+        {
+          "name": "cookies",
+          "label": "Cookies (Optional)",
+          "type": "textarea",
+          "required": false,
+          "placeholder": "Optional cookies for enhanced compatibility",
+          "helpText": "Full cookie string from browser DevTools (optional but recommended)"
+        }
+      ],
+      "createdAt": 1781217537985,
+      "updatedAt": 1781217537985
+    },
+    {
+      "id": "zai",
+      "name": "Z.ai",
+      "type": "builtin",
+      "authType": "jwt",
+      "apiEndpoint": "https://chat.z.ai/api",
+      "chatPath": "/v2/chat/completions",
+      "headers": {
+        "Content-Type": "application/json",
+        "Accept": "*/*",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "Accept-Language": "zh-CN",
+        "Cache-Control": "no-cache",
+        "Origin": "https://chat.z.ai",
+        "Pragma": "no-cache",
+        "Sec-Ch-Ua": "\"Not/A)Brand\";v=\"99\", \"Chromium\";v=\"148\"",
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": "\"macOS\"",
+        "Sec-Fetch-Dest": "empty",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "same-origin",
+        "X-FE-Version": "prod-fe-1.1.37",
+        "X-Region": "domestic"
+      },
+      "enabled": true,
+      "description": "Z.ai - Free AI Chatbot powered by GLM-5.1, GLM-5, and GLM-4.7",
+      "supportedModels": [
+        "GLM-5.1",
+        "GLM-5-Turbo",
+        "GLM-5V-Turbo",
+        "GLM-5",
+        "GLM-4.7"
+      ],
+      "modelMappings": {
+        "GLM-5.1": "GLM-5.1",
+        "GLM-5-Turbo": "GLM-5-Turbo",
+        "GLM-5V-Turbo": "GLM-5v-Turbo",
+        "GLM-5": "glm-5",
+        "GLM-4.7": "glm-4.7"
+      },
+      "credentialFields": [
+        {
+          "name": "token",
+          "label": "Access Token",
+          "type": "password",
+          "required": true,
+          "placeholder": "Enter Z.ai JWT Token",
+          "helpText": "Get token from Z.ai web version, found in browser DevTools Application -> Cookie, starts with \"eyJ...\""
+        },
+        {
+          "name": "captcha_verify_param",
+          "label": "Captcha Verify Param",
+          "type": "password",
+          "required": false,
+          "placeholder": "Optional captcha_verify_param from chat.z.ai HAR",
+          "helpText": "Optional. If Z.ai requires verification, copy captcha_verify_param from the latest /api/v2/chat/completions request body."
+        }
+      ],
+      "tokenCheckEndpoint": "/api/v1/users/user/settings",
+      "tokenCheckMethod": "GET",
+      "createdAt": 1781217537985,
+      "updatedAt": 1781217537985
+    }
+  ],
+  "accounts": [],
+  "config": {
+    "proxyPort": 18181,
+    "proxyHost": "127.0.0.1",
+    "loadBalanceStrategy": "round-robin",
+    "modelMappings": {
+      "deepseek-v4-flash-think": {
+        "requestModel": "deepseek-v4-flash-think",
+        "actualModel": "deepseek-v4-flash",
+        "preferredProviderId": "deepseek"
+      },
+      "deepseek-v4-flash-search": {
+        "requestModel": "deepseek-v4-flash-search",
+        "actualModel": "deepseek-v4-flash",
+        "preferredProviderId": "deepseek"
+      },
+      "deepseek-v4-flash-think-search": {
+        "requestModel": "deepseek-v4-flash-think-search",
+        "actualModel": "deepseek-v4-flash",
+        "preferredProviderId": "deepseek"
+      },
+      "deepseek-v4-pro-think": {
+        "requestModel": "deepseek-v4-pro-think",
+        "actualModel": "deepseek-v4-pro",
+        "preferredProviderId": "deepseek"
+      },
+      "deepseek-v4-pro-search": {
+        "requestModel": "deepseek-v4-pro-search",
+        "actualModel": "deepseek-v4-pro",
+        "preferredProviderId": "deepseek"
+      },
+      "deepseek-v4-pro-think-search": {
+        "requestModel": "deepseek-v4-pro-think-search",
+        "actualModel": "deepseek-v4-pro",
+        "preferredProviderId": "deepseek"
+      }
+    },
+    "defaultModelMappingsSeeded": true,
+    "theme": "system",
+    "autoStart": false,
+    "autoStartProxy": true,
+    "minimizeToTray": true,
+    "logLevel": "info",
+    "logRetentionDays": 7,
+    "requestLogConfig": {
+      "enabled": true,
+      "maxEntries": 200,
+      "includeBodies": false,
+      "maxBodyChars": 8000,
+      "redactSensitiveData": true
+    },
+    "requestTimeout": 60000,
+    "retryCount": 3,
+    "apiKeys": [],
+    "enableApiKey": false,
+    "oauthProxyMode": "system",
+    "sessionConfig": {
+      "sessionTimeout": 30,
+      "maxMessagesPerSession": 50,
+      "deleteAfterTimeout": false,
+      "maxSessionsPerAccount": 3
+    },
+    "toolCallingConfig": {
+      "enabled": true,
+      "mode": "auto",
+      "clientAdapterId": "standard-openai-tools",
+      "diagnosticsEnabled": false,
+      "advanced": {
+        "promptPreviewEnabled": false
+      }
+    },
+    "managementApi": {
+      "enableManagementApi": true,
+      "managementApiSecret": "mgmt_6fc406e6-dd64-4445-9c10-3862234764a3"
+    },
+    "contextManagement": {
+      "enabled": false,
+      "strategies": {
+        "slidingWindow": {
+          "enabled": true,
+          "maxMessages": 20
+        },
+        "tokenLimit": {
+          "enabled": false,
+          "maxTokens": 4000
+        },
+        "summary": {
+          "enabled": false,
+          "keepRecentMessages": 20
+        }
+      },
+      "executionOrder": [
+        "slidingWindow",
+        "tokenLimit",
+        "summary"
+      ]
+    }
+  },
+  "logs": [],
+  "requestLogs": [],
+  "systemPrompts": [],
+  "sessions": [],
+  "statistics": {
+    "totalRequests": 0,
+    "successRequests": 0,
+    "failedRequests": 0,
+    "totalLatency": 0,
+    "lastUpdated": 1781217537866,
+    "modelUsage": {},
+    "providerUsage": {},
+    "accountUsage": {},
+    "dailyStats": {}
+  },
+  "userModelOverrides": {}
+}
